@@ -1,0 +1,144 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  /* Brand Typography Alignment */
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Custom Color Overrides to make code cleaner */
+  --color-panik-orange: #F97316;
+  --color-panik-deep: #09090B;
+  --color-panik-surface: #111318;
+  --color-panik-card: rgba(17, 19, 24, 0.6);
+  --color-panik-text-primary: #F8FAFC;
+  --color-panik-text-secondary: #94A3B8;
+
+  /* Premium alert values */
+  --color-panik-green: #22C55E;
+  --color-panik-amber: #F59E0B;
+  --color-panik-red: #EF4444;
+  --color-panik-darkred: #DC2626;
+}
+
+/* Custom structural styles for financial style aesthetics */
+@layer base {
+  body {
+    background-color: #09090B;
+    color: #F8FAFC;
+    font-family: var(--font-sans);
+    overflow-x: clip;
+    position: relative;
+  }
+
+  body::after {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.025;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #09090B;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(249, 115, 22, 0.2);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(249, 115, 22, 0.4);
+  }
+}
+
+/* Elegant Utilities */
+.panik-glow-orange {
+  box-shadow: 0 0 25px -3px rgba(249, 115, 22, 0.45), 0 0 10px -2px rgba(249, 115, 22, 0.2);
+}
+
+.panik-glow-orange-text {
+  text-shadow: 0 0 15px rgba(249, 115, 22, 0.6);
+}
+
+.panik-glow-red {
+  box-shadow: 0 0 25px -3px rgba(239, 68, 68, 0.5), 0 0 10px -2px rgba(239, 68, 68, 0.35);
+}
+
+.panik-glow-green {
+  box-shadow: 0 0 25px -3px rgba(34, 197, 94, 0.4), 0 0 10px -2px rgba(34, 197, 94, 0.2);
+}
+
+/* Glassmorphism treatment */
+.panik-glass {
+  background: rgba(21, 27, 38, 0.45);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.05), 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+  transition: border-color 0.3s ease, background 0.3s ease;
+}
+
+.panik-glass:hover {
+  border-color: rgba(255, 255, 255, 0.13);
+  background: rgba(21, 27, 38, 0.55);
+}
+
+/* Dynamic Grid Background with slow fade effect */
+.panik-grid-bg {
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 40px 40px;
+  background-position: center top;
+}
+
+.panik-dot-bg {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Soft orange gradient background glow */
+.panik-radial-ambient {
+  background: radial-gradient(circle at 60% 40%, rgba(249, 115, 22, 0.06) 0%, transparent 60%);
+}
+
+.panik-radial-subtle {
+  background: radial-gradient(circle at center, rgba(249, 115, 22, 0.03) 0%, transparent 70%);
+}
+
+@keyframes slow-pulse {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.03); }
+}
+
+.animate-slow-pulse {
+  animation: slow-pulse 4s infinite ease-in-out;
+}
+
+@keyframes float-subtle {
+  0%, 100% { transform: translateY(0px) rotate(0.5deg); }
+  50% { transform: translateY(-6px) rotate(-0.5deg); }
+}
+
+.animate-float-subtle {
+  animation: float-subtle 6s infinite ease-in-out;
+}
+
+@keyframes float-delayed {
+  0%, 100% { transform: translateY(-3px) rotate(-1.5deg) scale(0.98); }
+  50% { transform: translateY(3px) rotate(-0.5deg) scale(1); }
+}
+
+.animate-float-delayed {
+  animation: float-delayed 8s infinite ease-in-out;
+}
