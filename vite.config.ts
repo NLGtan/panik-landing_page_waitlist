@@ -17,6 +17,12 @@ export default defineConfig(() => {
       hmr: process.env.DISABLE_HMR !== 'true',
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      // Local scoring API (npm run dev:api) — keys stay server-side; the
+      // browser only sees score JSON. 127.0.0.1 (not localhost): Node 17+
+      // resolves localhost to ::1 first on Windows → ECONNREFUSED.
+      proxy: {
+        '/api': 'http://127.0.0.1:8787',
+      },
     },
     build: {
       rollupOptions: {

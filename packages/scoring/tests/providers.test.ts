@@ -50,10 +50,8 @@ describe("CoinGeckoProvider", () => {
   it("sends the demo API key header", async () => {
     const fetchFn = vi.fn(async () => jsonResponse(syntheticChart(100)));
     await new CoinGeckoProvider("CG-KEY", { fetchFn }).getAssetRiskInput("ethereum");
-    const headers = (fetchFn.mock.calls[0]?.[1] as RequestInit).headers as Record<
-      string,
-      string
-    >;
+    const callArgs = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
+    const headers = callArgs[1].headers as Record<string, string>;
     expect(headers["x-cg-demo-api-key"]).toBe("CG-KEY");
   });
 

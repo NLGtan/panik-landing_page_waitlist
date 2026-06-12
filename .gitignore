@@ -7,6 +7,5 @@ coverage/
 .env*
 !.env.example
 
-# Local-only infra tooling (security: keep ops scripts + DB schema out of the repo)
-scripts/
-supabase/
+# Personal daily logs — not for the shared repo
+Progress/

@@ -16,7 +16,8 @@
     "ping:apis": "node --env-file=.env scripts/ping-apis.mjs",
     "demo:scores": "node --env-file=.env --import tsx scripts/score-demo.ts",
     "demo:watch": "node --env-file=.env --import tsx scripts/watch-demo.ts",
-    "db:verify": "node --env-file=.env scripts/verify-schema.mjs"
+    "db:verify": "node --env-file=.env scripts/verify-schema.mjs",
+    "dev:api": "node --watch --env-file=.env --import tsx scripts/api-server.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

@@ -29,7 +29,7 @@ describe("WatchService", () => {
 
   it("routes scoring failures to onError without killing the loop", async () => {
     const onError = vi.fn();
-    const good = vi.fn(async () => []);
+    const good = vi.fn(async (_wallet: string) => []);
     const service = new WatchService({
       scoreWallet: async (w) => {
         if (w === "0xbad") throw new Error("rpc down");

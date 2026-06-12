@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { 
   ShieldAlert, 
   Activity, 
@@ -31,6 +31,13 @@ import {
 } from "lucide-react";
 import { calculateDynamicPosition, formatCurrency } from "./lib/utils";
 import { PositionState } from "./lib/types";
+import { LivePositions } from "./components/LivePositions";
+import {
+  useChainTelemetry,
+  useCompassScores,
+  useLiveScores,
+  useProspective,
+} from "./lib/live";
 import { motion, AnimatePresence } from "motion/react";
 
 function ProtocolLogo({ protocol, size = "w-6 h-6" }: { protocol: string; size?: string }) {
@@ -120,7 +127,10 @@ type RiskProfile = "conservative" | "moderate" | "aggressive";
 
 interface VaultPreset {
   id: string;
-  protocol: "Aave V3" | "Moonwell" | "Compound" | "GMX";
+  protocol: "Aave V3" | "Moonwell";
+  /** Engine identifiers — must match packages/scoring MARKETS + the API's COMPASS_SCENARIOS ids. */
+  engineProtocol: "aave_v3" | "moonwell";
+  collateralSymbol: string;
   assetPair: string;
   collateralAsset: string;
   debtAsset: string;
@@ -128,35 +138,41 @@ interface VaultPreset {
   defaultBorrow: number;
   defaultPrice: number;
   apy: number;
-  baseRisk: number; // For compass display
+  baseRisk: number; // Offline fallback — overridden by live engine scores when the API is up
   riskStatus: "LOW" | "ELEVATED" | "HIGH" | "CRITICAL";
   protocolCount: number;
   poolCount: number;
   positionCount: number;
 }
 
+// Engine-supported presets (Aave V3 + Moonwell on Base — the camp scope).
+// USD sizes mirror the API's COMPASS_SCENARIOS so live scores map 1:1 by id.
 const VAULT_PRESETS: VaultPreset[] = [
   {
     id: "aave-usdc-supply",
     protocol: "Aave V3",
+    engineProtocol: "aave_v3",
+    collateralSymbol: "USDC",
     assetPair: "USDC SUPPLY BUFFER",
     collateralAsset: "USDC",
-    debtAsset: "USDT",
+    debtAsset: "USDC",
     defaultCollateral: 2000,
     defaultBorrow: 500,
     defaultPrice: 1,
     apy: 8.2,
-    baseRisk: 12,
+    baseRisk: 8,
     riskStatus: "LOW",
     protocolCount: 12,
     poolCount: 8,
     positionCount: 4
   },
   {
-    id: "compound-usdt-supply",
-    protocol: "Compound",
-    assetPair: "USDT LIQUIDITY YIELD",
-    collateralAsset: "USDT",
+    id: "moonwell-usdc-supply",
+    protocol: "Moonwell",
+    engineProtocol: "moonwell",
+    collateralSymbol: "USDC",
+    assetPair: "USDC LIQUIDITY YIELD",
+    collateralAsset: "USDC",
     debtAsset: "USDC",
     defaultCollateral: 1500,
     defaultBorrow: 300,
@@ -169,64 +185,72 @@ const VAULT_PRESETS: VaultPreset[] = [
     positionCount: 7
   },
   {
-    id: "aave-wsteth-supply",
+    id: "aave-wsteth-vault",
     protocol: "Aave V3",
+    engineProtocol: "aave_v3",
+    collateralSymbol: "wstETH",
     assetPair: "wstETH / USDC VAULT",
     collateralAsset: "wstETH",
     debtAsset: "USDC",
-    defaultCollateral: 2.1,
+    defaultCollateral: 4,
     defaultBorrow: 4500,
-    defaultPrice: 3820,
+    defaultPrice: 2000,
     apy: 5.2,
-    baseRisk: 24,
-    riskStatus: "LOW",
+    baseRisk: 41,
+    riskStatus: "ELEVATED",
     protocolCount: 18,
     poolCount: 12,
     positionCount: 9
   },
   {
-    id: "compound-usdc-borrow",
-    protocol: "Compound",
-    assetPair: "USDC BORROW MARGIN",
-    collateralAsset: "USDC",
-    debtAsset: "ETH",
-    defaultCollateral: 5000,
-    defaultBorrow: 1.1,
-    defaultPrice: 3700,
+    id: "aave-weth-borrow",
+    protocol: "Aave V3",
+    engineProtocol: "aave_v3",
+    collateralSymbol: "WETH",
+    assetPair: "WETH / USDC BORROW",
+    collateralAsset: "WETH",
+    debtAsset: "USDC",
+    defaultCollateral: 3,
+    defaultBorrow: 2000,
+    defaultPrice: 1667,
     apy: 6.9,
-    baseRisk: 31,
-    riskStatus: "ELEVATED",
+    baseRisk: 22,
+    riskStatus: "LOW",
     protocolCount: 16,
     poolCount: 14,
     positionCount: 12
   },
   {
-    id: "moonwell-eth-borrow",
+    id: "moonwell-weth-debt",
     protocol: "Moonwell",
-    assetPair: "ETH / USDC DEBT",
-    collateralAsset: "ETH",
+    engineProtocol: "moonwell",
+    collateralSymbol: "WETH",
+    assetPair: "WETH / USDC DEBT",
+    collateralAsset: "WETH",
     debtAsset: "USDC",
     defaultCollateral: 1.2,
-    defaultBorrow: 2000,
-    defaultPrice: 3700,
+    defaultBorrow: 1300,
+    defaultPrice: 1667,
     apy: 5.7,
-    baseRisk: 58,
+    baseRisk: 52,
     riskStatus: "HIGH",
     protocolCount: 22,
     poolCount: 18,
     positionCount: 18
   },
   {
-    id: "gmx-leveraged-eth",
-    protocol: "GMX",
-    assetPair: "ETH DEFI MAX LEVERAGE",
-    collateralAsset: "ETH",
+    id: "moonwell-cbeth-max",
+    protocol: "Moonwell",
+    engineProtocol: "moonwell",
+    collateralSymbol: "cbETH",
+    assetPair: "cbETH MAX LEVERAGE",
+    collateralAsset: "cbETH",
     debtAsset: "USDC",
     defaultCollateral: 0.8,
-    defaultBorrow: 2200,
-    defaultPrice: 3700,
-    apy: 18.5,
-    baseRisk: 78,
+    defaultBorrow: 1050,
+    defaultPrice: 1888,
+    apy: 12.5,
+    baseRisk: 76,
     riskStatus: "CRITICAL",
     protocolCount: 45,
     poolCount: 24,
@@ -237,7 +261,7 @@ const VAULT_PRESETS: VaultPreset[] = [
 export function AppDemo() {
   // Navigation tabs exactly reflecting the Figma screenshot
   const [activeTab, setActiveTab] = useState<SidebarTab>("portfolio");
-  const [selectedPresetId, setSelectedPresetId] = useState<string>("moonwell-eth-borrow");
+  const [selectedPresetId, setSelectedPresetId] = useState<string>("moonwell-weth-debt");
   const [selectedRiskProfile, setSelectedRiskProfile] = useState<RiskProfile>("moderate");
   const [selectedRiskBreakdownPreset, setSelectedRiskBreakdownPreset] = useState<VaultPreset | null>(null);
 
@@ -257,8 +281,96 @@ export function AppDemo() {
   const [automaticRepayTarget, setAutomaticRepayTarget] = useState<number>(30);
   const [isRepayActive, setIsRepayActive] = useState<boolean>(true);
 
+  // ── LIVE data (scoring API; every hook degrades gracefully offline) ──────
+  // Declared FIRST — the memos below consume these (const = TDZ).
+  const { positions: livePositions, updatedAt: liveUpdatedAt, offline: liveOffline } = useLiveScores();
+  const { scores: compassLive } = useCompassScores();
+  const chainTel = useChainTelemetry();
+
+  // A user portfolio is ONE wallet. The registry holds several (validation
+  // cohort), so Portfolio gets a selector: defaults to the first wallet,
+  // "ALL" remains as the ops/registry view. SIWE later replaces this with
+  // the connected wallet.
+  const [selectedWallet, setSelectedWallet] = useState<string | "all" | null>(null); // null = not yet initialised
+  const wallets = useMemo(() => {
+    if (!livePositions) return [];
+    const seen = new Map<string, { wallet: string; label: string | null }>();
+    for (const p of livePositions) {
+      if (!seen.has(p.wallet)) seen.set(p.wallet, { wallet: p.wallet, label: p.label });
+    }
+    return [...seen.values()];
+  }, [livePositions]);
+
+  useEffect(() => {
+    if (selectedWallet === null && wallets.length > 0) {
+      setSelectedWallet(wallets[0]!.wallet);
+    }
+  }, [wallets, selectedWallet]);
+
+  const portfolioPositions = useMemo(() => {
+    if (!livePositions) return null;
+    return selectedWallet && selectedWallet !== "all"
+      ? livePositions.filter((p) => p.wallet === selectedWallet)
+      : livePositions;
+  }, [livePositions, selectedWallet]);
+
+  // Presets with LIVE engine scores overlaid (fallback: static baseRisk).
+  // Defined before activePreset so Compass, Portfolio and Watch all read
+  // the same live-updated objects.
+  const presetsWithLive = useMemo(
+    () =>
+      VAULT_PRESETS.map((p) => {
+        const live = compassLive?.[p.id];
+        return live ? { ...p, baseRisk: live.total, riskStatus: live.band } : p;
+      }),
+    [compassLive],
+  );
+
+  // Portfolio macro metrics from the SELECTED wallet's live positions
+  const liveMacro = useMemo(() => {
+    if (!portfolioPositions || portfolioPositions.length === 0) return null;
+    const capital = portfolioPositions.reduce((a, p) => a + p.collateralValueUsd, 0);
+    const debt = portfolioPositions.reduce((a, p) => a + p.borrowValueUsd, 0);
+    const aggregate =
+      capital > 0
+        ? Math.round(portfolioPositions.reduce((a, p) => a + p.total * p.collateralValueUsd, 0) / capital)
+        : 0;
+    return {
+      capital,
+      debt,
+      ltv: capital > 0 ? debt / capital : 0,
+      positions: portfolioPositions.length,
+      protocols: new Set(portfolioPositions.map((p) => p.protocol)).size,
+      aggregate,
+    };
+  }, [portfolioPositions]);
+
+  // Collateral allocation for the SELECTED wallet (mock weights when offline)
+  const allocation = useMemo(() => {
+    const bySymbol: Record<string, number> = {};
+    for (const p of portfolioPositions ?? []) {
+      bySymbol[p.scoredCollateralSymbol] =
+        (bySymbol[p.scoredCollateralSymbol] ?? 0) + p.collateralValueUsd;
+    }
+    const src: { symbol: string; usd: number }[] =
+      portfolioPositions && portfolioPositions.length > 0
+        ? Object.keys(bySymbol)
+            .map((symbol) => ({ symbol, usd: bySymbol[symbol] ?? 0 }))
+            .sort((a, b) => b.usd - a.usd)
+            .slice(0, 4)
+        : [
+            { symbol: "wstETH (LST Locked)", usd: 8022 },
+            { symbol: "USDC Spot", usd: 7000 },
+            { symbol: "ETH Spot", usd: 1928 },
+            { symbol: "USDT Pool", usd: 1500 },
+          ];
+    const total = src.reduce((a, b) => a + b.usd, 0) || 1;
+    const colors = ["bg-indigo-500", "bg-sky-500", "bg-panik-orange", "bg-emerald-500"];
+    return src.map((a, i) => ({ ...a, pct: (a.usd / total) * 100, color: colors[i % 4] as string }));
+  }, [portfolioPositions]);
+
   // Load selected preset for Watch/Simulator tab
-  const activePreset = VAULT_PRESETS.find(p => p.id === selectedPresetId) || VAULT_PRESETS[4];
+  const activePreset = presetsWithLive.find(p => p.id === selectedPresetId) || presetsWithLive[4];
 
   // Simulator Sliders
   const [collateralAmount, setCollateralAmount] = useState<number>(activePreset.defaultCollateral);
@@ -289,7 +401,53 @@ export function AppDemo() {
     );
   };
 
-  const positionState = calculateResult();
+  // LIVE Watch scoring: sliders → the real engine (debounced /api/prospective,
+  // live CoinGecko vol + DefiLlama TVL context). Falls back to the local
+  // mock formula when the API is offline.
+  const prospectiveArgs = useMemo(
+    () => ({
+      protocol: activePreset.engineProtocol,
+      symbol: activePreset.collateralSymbol,
+      collateralUsd: Math.max(0, Math.round(collateralAmount * assetPrice * 100) / 100),
+      borrowUsd: Math.max(0, borrowAmount),
+    }),
+    [activePreset.engineProtocol, activePreset.collateralSymbol, collateralAmount, assetPrice, borrowAmount],
+  );
+  const liveWatch = useProspective(prospectiveArgs);
+
+  const recommendationFor = (status: PositionState["status"]): string => {
+    if (status === "CRITICAL")
+      return `CRITICAL ALERT: Repay ${activePreset.debtAsset} debt immediately to prevent liquidator bids!`;
+    if (status === "HIGH")
+      return `ACTION REQUIRED: Repay part of the ${activePreset.debtAsset} debt to restore a secure buffer.`;
+    if (status === "ELEVATED")
+      return `RECOMMENDED: Supply more ${activePreset.collateralAsset} to suppress minor market swings.`;
+    return "Position optimal. Collateral buffer protects against severe asset volatility.";
+  };
+
+  const positionState: PositionState = liveWatch
+    ? {
+        protocol: activePreset.protocol,
+        assetPair: activePreset.assetPair,
+        riskScore: liveWatch.total,
+        status: liveWatch.band,
+        collateralValue: collateralAmount * assetPrice,
+        borrowValue: borrowAmount,
+        healthFactor: liveWatch.healthFactor ?? 9.99,
+        liquidationPrice:
+          liveWatch.liquidationDrawdown !== null
+            ? Math.round(assetPrice * (1 - liveWatch.liquidationDrawdown))
+            : 0,
+        currentPrice: assetPrice,
+        recommendation: recommendationFor(liveWatch.band),
+        breakdown: {
+          positionHealth: Math.round(liveWatch.subScores.positionHealth),
+          assetVolatility: Math.round(liveWatch.subScores.assetRisk),
+          protocolSafety: Math.round(liveWatch.subScores.protocolSafety),
+          systemicMarketStress: Math.round(liveWatch.subScores.systemicRisk),
+        },
+      }
+    : calculateResult();
 
   // Dynamic parameters for redesigned Panik Risk Index
   const diff = positionState.riskScore - activePreset.baseRisk;
@@ -301,21 +459,25 @@ export function AppDemo() {
     setLogs(prev => [...prev.slice(-30), `${timestamp} UTC - ${message}`]);
   };
 
-  // Block timer simulator
+  // LIVE chain telemetry: real Base block number + gas price via the API
+  // (the previous random-walk simulation is gone).
+  useEffect(() => {
+    if (chainTel.blockNumber) {
+      setBlockNumber(chainTel.blockNumber);
+      addLog(`Block ${chainTel.blockNumber.toLocaleString()} confirmed on Base. Oracle parameters refreshed.`);
+    }
+    if (chainTel.gasGwei !== null) {
+      setGasPrice(+chainTel.gasGwei.toFixed(4));
+    }
+  }, [chainTel.blockNumber, chainTel.gasGwei]);
+
+  // Refresh countdown (display only — the live feeds poll on their own cadence)
   useEffect(() => {
     const interval = setInterval(() => {
-      setSecTillUpdate(prev => {
-        if (prev <= 1) {
-          setBlockNumber(b => b + 1);
-          setGasPrice(g => Math.max(1.1, +(g + (Math.random() * 0.8 - 0.4)).toFixed(1)));
-          addLog(`Block ${blockNumber + 1} confirmed. Relaying fresh multi-vault index oracle parameters...`);
-          return 60;
-        }
-        return prev - 1;
-      });
+      setSecTillUpdate(prev => (prev <= 1 ? 60 : prev - 1));
     }, 1000);
     return () => clearInterval(interval);
-  }, [blockNumber]);
+  }, []);
 
   useEffect(() => {
     if (activeTab === "watch") {
@@ -337,25 +499,25 @@ export function AppDemo() {
     addLog(`Automation Trigger: Executed flash loan repayment of -${(currentDebt - reducedDebt).toFixed(2)} ${activePreset.debtAsset} to lower systemic margins.`);
   };
 
-  // Profile-based filtering for Compass tab exactly corresponding to the Figma screen
-  // Categorizes mock positions based on risk levels
+  // Profile-based filtering for Compass — runs on LIVE engine scores when
+  // the API is up (presetsWithLive), static fallbacks otherwise.
   const getProfileThresholds = () => {
     switch (selectedRiskProfile) {
       case "conservative":
         return {
-          recommended: VAULT_PRESETS.filter(p => p.baseRisk < 20),
-          outside: VAULT_PRESETS.filter(p => p.baseRisk >= 20)
+          recommended: presetsWithLive.filter(p => p.baseRisk < 20),
+          outside: presetsWithLive.filter(p => p.baseRisk >= 20)
         };
       case "aggressive":
         return {
-          recommended: VAULT_PRESETS.filter(p => p.baseRisk >= 50),
-          outside: VAULT_PRESETS.filter(p => p.baseRisk < 50)
+          recommended: presetsWithLive.filter(p => p.baseRisk >= 50),
+          outside: presetsWithLive.filter(p => p.baseRisk < 50)
         };
       case "moderate":
       default:
         return {
-          recommended: VAULT_PRESETS.filter(p => p.baseRisk >= 20 && p.baseRisk < 50),
-          outside: VAULT_PRESETS.filter(p => p.baseRisk < 20 || p.baseRisk >= 50)
+          recommended: presetsWithLive.filter(p => p.baseRisk >= 20 && p.baseRisk < 50),
+          outside: presetsWithLive.filter(p => p.baseRisk < 20 || p.baseRisk >= 50)
         };
     }
   };
@@ -480,7 +642,13 @@ export function AppDemo() {
             <div className="h-4 w-px bg-white/10 hidden md:block"></div>
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/[0.02] border border-white/[0.05] text-[11px] font-semibold text-white/80">
               <Wallet className="w-3.5 h-3.5 text-panik-orange" />
-              <span>0x8F94...42fA</span>
+              <span>
+                {selectedWallet && selectedWallet !== "all"
+                  ? `${selectedWallet.slice(0, 6)}…${selectedWallet.slice(-4)}`
+                  : selectedWallet === "all"
+                    ? `Registry (${wallets.length} wallets)`
+                    : "0x8F94…42fA"}
+              </span>
             </div>
           </div>
         </header>
@@ -503,7 +671,12 @@ export function AppDemo() {
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-white/[0.06] pb-5">
                   <div>
                     <h1 className="text-3xl font-display font-extrabold tracking-tight text-white mb-1">Compass</h1>
-                    <p className="text-panik-text-secondary font-mono text-xs">Find positions matching your risk profile</p>
+                    <p className="text-panik-text-secondary font-mono text-xs">
+                      Find positions matching your risk profile
+                      {compassLive && (
+                        <span className="ml-2 text-[10px] text-emerald-400">● live engine scores</span>
+                      )}
+                    </p>
                   </div>
 
                   {/* High Fidelity Risk Profile Toggle matching Figma */}
@@ -730,7 +903,7 @@ export function AppDemo() {
                         <span className="text-[9px] font-mono text-panik-text-secondary uppercase">DAEMON SENTINEL</span>
                         <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded border border-emerald-500/25 flex items-center gap-1 font-bold mt-1">
                           <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse"></span>
-                          SECURE WATCH
+                          {liveWatch ? "LIVE ENGINE" : "SIMULATED"}
                         </span>
                       </div>
                     </div>
@@ -1070,81 +1243,98 @@ export function AppDemo() {
                   <p className="text-panik-text-secondary font-mono text-xs">Insured capital backing and automated flash hedges across monitored vaults</p>
                 </div>
 
-                {/* Macro metrics columns */}
+                {/* Wallet selector — a portfolio is ONE wallet; ALL = ops/registry view */}
+                {wallets.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[9px] font-mono uppercase tracking-widest text-panik-text-secondary">Wallet:</span>
+                    {wallets.map((w) => (
+                      <button
+                        key={w.wallet}
+                        onClick={() => setSelectedWallet(w.wallet)}
+                        title={w.label ?? w.wallet}
+                        className={`px-3 py-1.5 rounded-lg text-[10px] font-mono border transition-all cursor-pointer ${
+                          selectedWallet === w.wallet
+                            ? "bg-panik-orange/15 text-panik-orange border-panik-orange/30 font-bold"
+                            : "bg-white/[0.02] text-panik-text-secondary border-white/[0.06] hover:text-white"
+                        }`}
+                      >
+                        {w.wallet.slice(0, 6)}…{w.wallet.slice(-4)}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setSelectedWallet("all")}
+                      className={`px-3 py-1.5 rounded-lg text-[10px] font-mono border transition-all cursor-pointer ${
+                        selectedWallet === "all"
+                          ? "bg-panik-orange/15 text-panik-orange border-panik-orange/30 font-bold"
+                          : "bg-white/[0.02] text-panik-text-secondary border-white/[0.06] hover:text-white"
+                      }`}
+                    >
+                      ALL (registry)
+                    </button>
+                  </div>
+                )}
+
+                {/* Macro metrics columns — computed from LIVE positions when available */}
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-4.5">
                   <div className="bg-[#111318]/50 border border-white/[0.06] p-4.5 rounded-2xl">
-                    <span className="block text-[8px] font-mono text-[#748BAA] uppercase font-bold">Insured Capital</span>
-                    <span className="text-2xl font-mono font-bold text-white mt-1 block">$18,450</span>
+                    <span className="block text-[8px] font-mono text-[#748BAA] uppercase font-bold">
+                      Monitored Capital {liveMacro && <span className="text-emerald-400">· LIVE</span>}
+                    </span>
+                    <span className="text-2xl font-mono font-bold text-white mt-1 block">
+                      {liveMacro ? `$${Math.round(liveMacro.capital).toLocaleString()}` : "$18,450"}
+                    </span>
                     <span className="text-[9px] font-mono text-emerald-400 bg-emerald-500/5 px-1.5 py-0.5 rounded border border-emerald-500/10 inline-block mt-1">● Guard active</span>
                   </div>
 
                   <div className="bg-[#111318]/50 border border-white/[0.06] p-4.5 rounded-2xl">
-                    <span className="block text-[8px] font-mono text-[#748BAA] uppercase font-bold">Insured Liabilities</span>
-                    <span className="text-2xl font-mono font-bold text-white mt-1 block">$9,310</span>
-                    <span className="text-[9px] font-mono text-panik-text-secondary mt-1 block">Net LTV ratio: 50%</span>
+                    <span className="block text-[8px] font-mono text-[#748BAA] uppercase font-bold">
+                      Monitored Liabilities {liveMacro && <span className="text-emerald-400">· LIVE</span>}
+                    </span>
+                    <span className="text-2xl font-mono font-bold text-white mt-1 block">
+                      {liveMacro ? `$${Math.round(liveMacro.debt).toLocaleString()}` : "$9,310"}
+                    </span>
+                    <span className="text-[9px] font-mono text-panik-text-secondary mt-1 block">
+                      Net LTV ratio: {liveMacro ? `${Math.round(liveMacro.ltv * 100)}%` : "50%"}
+                    </span>
                   </div>
 
                   <div className="bg-[#111318]/50 border border-white/[0.06] p-4.5 rounded-2xl">
-                    <span className="block text-[8px] font-mono text-[#748BAA] uppercase font-bold">Multi-Chain Pools</span>
-                    <span className="text-2xl font-mono font-bold text-panik-orange mt-1 block">4 Pools</span>
-                    <span className="text-[9px] font-mono text-panik-text-secondary mt-1 block">Aave, Compound, Moonwell</span>
+                    <span className="block text-[8px] font-mono text-[#748BAA] uppercase font-bold">Protocols Watched</span>
+                    <span className="text-2xl font-mono font-bold text-panik-orange mt-1 block">
+                      {liveMacro ? `${liveMacro.positions} Positions` : "4 Pools"}
+                    </span>
+                    <span className="text-[9px] font-mono text-panik-text-secondary mt-1 block">
+                      {liveMacro ? `Aave V3, Moonwell · ${liveMacro.protocols} protocols` : "Aave, Moonwell"}
+                    </span>
                   </div>
 
                   <div className="bg-[#111318]/50 border border-white/[0.06] p-4.5 rounded-2xl">
-                    <span className="block text-[8px] font-mono text-[#748BAA] uppercase font-bold">Aggregate Risk Index</span>
-                    <span className="text-2xl font-mono font-bold text-emerald-400 mt-1 block">22 / 100</span>
-                    <span className="text-[9px] font-mono text-emerald-400 font-bold block mt-1">SECURE HEALTH STATUS</span>
+                    <span className="block text-[8px] font-mono text-[#748BAA] uppercase font-bold">
+                      Aggregate Risk Index {liveMacro && <span className="text-emerald-400">· LIVE</span>}
+                    </span>
+                    <span className={`text-2xl font-mono font-bold mt-1 block ${
+                      (liveMacro?.aggregate ?? 22) >= 50 ? "text-red-400" :
+                      (liveMacro?.aggregate ?? 22) >= 25 ? "text-amber-400" : "text-emerald-400"
+                    }`}>
+                      {liveMacro ? liveMacro.aggregate : 22} / 100
+                    </span>
+                    <span className={`text-[9px] font-mono font-bold block mt-1 ${
+                      (liveMacro?.aggregate ?? 22) >= 50 ? "text-red-400" :
+                      (liveMacro?.aggregate ?? 22) >= 25 ? "text-amber-400" : "text-emerald-400"
+                    }`}>
+                      {(liveMacro?.aggregate ?? 22) >= 50 ? "ELEVATED PORTFOLIO RISK" :
+                       (liveMacro?.aggregate ?? 22) >= 25 ? "WATCH STATUS" : "SECURE HEALTH STATUS"}
+                    </span>
                   </div>
                 </div>
 
-                {/* Dual Column Layout with Asset Visualization */}
+                {/* Dual Column: LIVE positions (left) + live allocation (right).
+                    Portfolio is 100% live — hypothetical scenarios live in
+                    Compass (discovery) and Watch (sandbox), not here. */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-4">
-                  {/* Left Column: Connected DeFi positions list (lg:col-span-7) */}
-                  <div className="lg:col-span-7 bg-white/[0.01] border border-white/[0.06] rounded-2xl p-5.5">
-                    <h3 className="text-sm font-mono tracking-widest text-[#748BAA] font-bold uppercase mb-4 flex items-center justify-between">
-                      <span>List of Connected DeFi positions</span>
-                      <span className="text-[10px] text-panik-orange font-normal">Active Guardrails</span>
-                    </h3>
-
-                    <div className="space-y-4">
-                      {VAULT_PRESETS.map((vault) => {
-                        const calculatedHF = +(2.5 - (vault.baseRisk / 60)).toFixed(2);
-                        return (
-                          <div 
-                            key={vault.id} 
-                            onClick={() => setSelectedRiskBreakdownPreset(vault)}
-                            className="flex flex-col sm:flex-row justify-between sm:items-center p-4 rounded-xl border border-white/[0.04] bg-[#111318]/50 gap-4 hover:border-white/[0.08] hover:bg-[#111318]/70 transition-all cursor-pointer group"
-                          >
-                            <div className="flex items-center gap-3">
-                              <ProtocolLogo protocol={vault.protocol} size="w-8 h-8" />
-                              <div>
-                                <h4 className="text-xs font-mono font-bold text-white group-hover:text-panik-orange transition-colors">
-                                  {vault.protocol} · {vault.assetPair}
-                                </h4>
-                                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-1 text-[10px] font-mono text-panik-text-secondary">
-                                  <span className={vault.baseRisk < 20 ? "text-emerald-400" : "text-amber-400"}>
-                                    {vault.baseRisk < 20 ? "Conforms to Profile" : "Outside Your Profile"}
-                                  </span>
-                                  <span className="text-white/20">•</span>
-                                  <span>Score: <strong className="text-white">{vault.baseRisk}</strong></span>
-                                  <span className="text-white/20">•</span>
-                                  <span>Health Factor: <strong className={vault.baseRisk < 20 ? "text-emerald-400" : vault.baseRisk < 50 ? "text-amber-400" : "text-red-400"}>{calculatedHF}</strong></span>
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-4.5 justify-between sm:justify-start" onClick={(e) => e.stopPropagation()}>
-                              <button
-                                onClick={() => setSelectedRiskBreakdownPreset(vault)}
-                                className="px-3.5 py-1.5 rounded bg-orange-500/10 hover:bg-panik-orange text-[10px] font-mono font-bold text-panik-orange hover:text-white border border-panik-orange/30 tracking-wider cursor-pointer transition-all"
-                              >
-                                View Risk Breakdown →
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                  {/* Left Column: the selected wallet's REAL positions */}
+                  <div className="lg:col-span-7">
+                    <LivePositions positions={portfolioPositions} updatedAt={liveUpdatedAt} offline={liveOffline} />
                   </div>
 
                   {/* Right Column: Asset Allocation visual breakdown (lg:col-span-5) */}
@@ -1160,61 +1350,36 @@ export function AppDemo() {
                       <div className="space-y-5">
                         {/* Beautiful segmented bar visual indicator representing asset weight allocation */}
                         <div className="h-4.5 w-full bg-white/[0.03] rounded-full overflow-hidden flex border border-white/[0.05] shadow-lg">
-                          <div className="h-full bg-indigo-500 transition-all duration-300 hover:opacity-90" style={{ width: '43.5%' }} title="wstETH: 43.5%"></div>
-                          <div className="h-full bg-sky-500 transition-all duration-300 hover:opacity-90" style={{ width: '37.9%' }} title="USDC: 37.9%"></div>
-                          <div className="h-full bg-panik-orange transition-all duration-300 hover:opacity-90" style={{ width: '10.5%' }} title="ETH: 10.5%"></div>
-                          <div className="h-full bg-emerald-500 transition-all duration-300 hover:opacity-90" style={{ width: '8.1%' }} title="USDT: 8.1%"></div>
+                          {allocation.map((a) => (
+                            <div
+                              key={a.symbol}
+                              className={`h-full ${a.color} transition-all duration-300 hover:opacity-90`}
+                              style={{ width: `${a.pct.toFixed(1)}%` }}
+                              title={`${a.symbol}: ${a.pct.toFixed(1)}%`}
+                            ></div>
+                          ))}
                         </div>
 
-                        {/* Custom asset distribution breakdown list */}
+                        {/* Asset distribution — computed from LIVE positions (mock when offline) */}
                         <div className="space-y-2.5">
-                          {/* wstETH */}
-                          <div className="flex justify-between items-center bg-white/[0.02] border border-white/[0.04] p-3 rounded-xl hover:bg-white/[0.04] transition-all">
-                            <div className="flex items-center gap-2.5">
-                              <span className="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
-                              <span className="font-mono text-xs font-bold text-white">wstETH (LST Locked)</span>
+                          {allocation.map((a) => (
+                            <div
+                              key={a.symbol}
+                              className="flex justify-between items-center bg-white/[0.02] border border-white/[0.04] p-3 rounded-xl hover:bg-white/[0.04] transition-all"
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <span className={`w-2.5 h-2.5 rounded-full ${a.color}`}></span>
+                                <span className="font-mono text-xs font-bold text-white">
+                                  {a.symbol}
+                                  {liveMacro && <span className="ml-1.5 text-[8px] text-emerald-400 font-normal">LIVE</span>}
+                                </span>
+                              </div>
+                              <div className="text-right">
+                                <span className="font-mono text-xs font-bold text-white">${Math.round(a.usd).toLocaleString()}</span>
+                                <span className="block text-[9px] font-mono text-panik-text-secondary">{a.pct.toFixed(1)}% weight</span>
+                              </div>
                             </div>
-                            <div className="text-right">
-                              <span className="font-mono text-xs font-bold text-white">$8,022</span>
-                              <span className="block text-[9px] font-mono text-panik-text-secondary">43.5% weight</span>
-                            </div>
-                          </div>
-
-                          {/* USDC */}
-                          <div className="flex justify-between items-center bg-white/[0.02] border border-white/[0.04] p-3 rounded-xl hover:bg-white/[0.04] transition-all">
-                            <div className="flex items-center gap-2.5">
-                              <span className="w-2.5 h-2.5 rounded-full bg-sky-500"></span>
-                              <span className="font-mono text-xs font-bold text-white">USDC Spot</span>
-                            </div>
-                            <div className="text-right">
-                              <span className="font-mono text-xs font-bold text-white">$7,000</span>
-                              <span className="block text-[9px] font-mono text-panik-text-secondary">37.9% weight</span>
-                            </div>
-                          </div>
-
-                          {/* ETH */}
-                          <div className="flex justify-between items-center bg-white/[0.02] border border-white/[0.04] p-3 rounded-xl hover:bg-white/[0.04] transition-all">
-                            <div className="flex items-center gap-2.5">
-                              <span className="w-2.5 h-2.5 rounded-full bg-panik-orange"></span>
-                              <span className="font-mono text-xs font-bold text-white">ETH Spot</span>
-                            </div>
-                            <div className="text-right">
-                              <span className="font-mono text-xs font-bold text-white">$1,928</span>
-                              <span className="block text-[9px] font-mono text-panik-text-secondary">10.5% weight</span>
-                            </div>
-                          </div>
-
-                          {/* USDT */}
-                          <div className="flex justify-between items-center bg-white/[0.02] border border-white/[0.04] p-3 rounded-xl hover:bg-white/[0.04] transition-all">
-                            <div className="flex items-center gap-2.5">
-                              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-                              <span className="font-mono text-xs font-bold text-white">USDT Pool</span>
-                            </div>
-                            <div className="text-right">
-                              <span className="font-mono text-xs font-bold text-white">$1,500</span>
-                              <span className="block text-[9px] font-mono text-panik-text-secondary">8.1% weight</span>
-                            </div>
-                          </div>
+                          ))}
                         </div>
                       </div>
                     </div>

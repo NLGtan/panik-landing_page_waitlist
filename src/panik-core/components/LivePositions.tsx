@@ -1,0 +1,143 @@
+/**
+ * LIVE positions — real wallets from the Supabase watch registry, scored by
+ * the actual PANIK engine against live Base mainnet state. Data arrives via
+ * props from AppDemo's useLiveScores() hook (shared with the Portfolio
+ * metrics) — this component only renders.
+ */
+
+import React from "react";
+import { Activity, RadioTower, WifiOff } from "lucide-react";
+import type { LiveWalletPosition } from "../lib/live";
+
+const PROTOCOL_NAME: Record<LiveWalletPosition["protocol"], string> = {
+  aave_v3: "Aave V3",
+  moonwell: "Moonwell",
+};
+
+function bandStyle(band: LiveWalletPosition["band"]): string {
+  if (band === "LOW") return "bg-emerald-500/10 text-emerald-400 border-emerald-500/25";
+  if (band === "ELEVATED") return "bg-amber-500/10 text-amber-500 border-amber-500/25";
+  return "bg-red-500/10 text-red-400 border-red-500/25";
+}
+
+function statusCopy(p: LiveWalletPosition): { text: string; cls: string } {
+  if (p.profileStatus === "outside")
+    return { text: "Outside your profile", cls: "text-red-400" };
+  if (p.profileStatus === "approaching")
+    return { text: "Approaching your limit", cls: "text-amber-400" };
+  return { text: "Within your profile", cls: "text-emerald-400" };
+}
+
+const fmtUsd = (v: number) => `$${Math.round(v).toLocaleString()}`;
+
+interface LivePositionsProps {
+  positions: LiveWalletPosition[] | null;
+  updatedAt: number;
+  offline: boolean;
+}
+
+export function LivePositions({ positions, updatedAt, offline }: LivePositionsProps) {
+  if (offline) {
+    return (
+      <div className="flex items-center gap-2 text-[10px] font-mono text-panik-text-secondary bg-white/[0.02] border border-white/[0.05] rounded-xl px-4 py-3">
+        <WifiOff className="w-3.5 h-3.5 text-panik-text-secondary" />
+        <span>Live feed offline (run `npm run dev:api`) — showing simulation data below.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white/[0.01] border border-panik-orange/20 rounded-2xl p-5.5">
+      <h3 className="text-sm font-mono tracking-widest text-[#748BAA] font-bold uppercase mb-4 flex items-center justify-between">
+        <span className="flex items-center gap-2">
+          <RadioTower className="w-4 h-4 text-panik-orange animate-pulse" />
+          <span>Live positions — Base mainnet</span>
+        </span>
+        <span className="text-[10px] text-panik-orange font-normal flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          {positions === null
+            ? "CONNECTING…"
+            : `REAL DATA · scored ${updatedAt ? `${Math.max(0, Math.round((Date.now() - updatedAt) / 1000))}s ago` : "now"}`}
+        </span>
+      </h3>
+
+      {positions === null && (
+        <div className="text-xs font-mono text-panik-text-secondary py-6 text-center">
+          Reading positions from chain…
+        </div>
+      )}
+
+      {positions !== null && positions.length === 0 && (
+        <div className="text-xs font-mono text-panik-text-secondary py-6 text-center">
+          No open positions among watched wallets.
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {(positions ?? []).map((p) => {
+          const status = statusCopy(p);
+          return (
+            <div
+              key={`${p.wallet}:${p.protocol}`}
+              className="flex flex-col sm:flex-row justify-between sm:items-center p-4 rounded-xl border border-white/[0.04] bg-[#111318]/50 gap-3"
+            >
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-xs font-mono font-bold text-white truncate">
+                    {PROTOCOL_NAME[p.protocol]} · {p.scoredCollateralSymbol} position
+                  </h4>
+                  <span
+                    className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded border ${bandStyle(p.band)}`}
+                  >
+                    {p.total} {p.band}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-1.5 text-[10px] font-mono text-panik-text-secondary">
+                  <span className={status.cls}>{status.text}</span>
+                  <span className="text-white/20">•</span>
+                  <span>
+                    HF:{" "}
+                    <strong
+                      className={
+                        p.healthFactor === null
+                          ? "text-emerald-400"
+                          : p.healthFactor < 1.25
+                            ? "text-red-400"
+                            : p.healthFactor < 1.7
+                              ? "text-amber-400"
+                              : "text-emerald-400"
+                      }
+                    >
+                      {p.healthFactor === null ? "no debt" : p.healthFactor.toFixed(2)}
+                    </strong>
+                  </span>
+                  <span className="text-white/20">•</span>
+                  <span>
+                    {fmtUsd(p.collateralValueUsd)} supplied / {fmtUsd(p.borrowValueUsd)} borrowed
+                  </span>
+                  <span className="text-white/20">•</span>
+                  <span className="truncate">{p.wallet.slice(0, 6)}…{p.wallet.slice(-4)}</span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 shrink-0 text-[9px] font-mono text-panik-text-secondary">
+                <span className="flex items-center gap-1" title="Sub-scores: position / asset / protocol / systemic">
+                  <Activity className="w-3 h-3 text-panik-orange" />
+                  {Math.round(p.subScores.positionHealth)} · {Math.round(p.subScores.assetRisk)} ·{" "}
+                  {Math.round(p.subScores.protocolSafety)} · {Math.round(p.subScores.systemicRisk)}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {positions !== null && positions.length > 0 && (
+        <p className="mt-4 text-[9px] font-mono text-white/30">
+          Scored by the PANIK engine: live RPC reads (Aave getUserAccountData / Moonwell derived HF)
+          + CoinGecko volatility + DefiLlama TVL. Refreshes every 60s.
+        </p>
+      )}
+    </div>
+  );
+}
