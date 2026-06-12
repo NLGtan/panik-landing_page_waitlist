@@ -1,0 +1,66 @@
+/**
+ * Scoring core types. The core is pure: it never fetches data.
+ * Adapters (prospective = Compass scenario, active = chain reads) build
+ * a ScoringInput and call computeScore. See SYSTEM_ARCHITECTURE.md §3.6.
+ */
+
+export type Protocol = "aave_v3" | "moonwell";
+
+export type Band = "LOW" | "ELEVATED" | "HIGH" | "CRITICAL";
+
+export type RiskProfile = "conservative" | "moderate" | "aggressive";
+
+export type ProfileStatus = "within" | "approaching" | "outside";
+
+export interface PositionHealthInput {
+  /**
+   * Protocol health factor. `null` = position has no debt.
+   * (Adapters must map Aave's no-debt sentinel `type(uint256).max` to null —
+   * never feed the raw sentinel into the formula.)
+   */
+  healthFactor: number | null;
+  /** Current loan-to-value, 0–1 (e.g. 0.62). */
+  currentLtv: number;
+  /** Protocol max LTV for the collateral, 0–1 (e.g. 0.82 on Aave). */
+  maxLtv: number;
+}
+
+export interface AssetRiskInput {
+  /** Last 30 daily returns of the collateral asset (fractional, e.g. 0.021). */
+  dailyReturns30d: number[];
+  /** Last 30 daily returns of BTC over the same window. */
+  btcReturns30d: number[];
+  /** 90-day price extremes of the collateral asset (same currency). */
+  maxPrice90d: number;
+  minPrice90d: number;
+}
+
+export interface SystemicRiskInput {
+  /** DeFi lending sector TVL now and 7 days ago (USD). */
+  sectorTvlNow: number;
+  sectorTvl7dAgo: number;
+  /** This protocol's TVL now and 7 days ago (USD). */
+  protocolTvlNow: number;
+  protocolTvl7dAgo: number;
+}
+
+export interface ScoringInput {
+  protocol: Protocol;
+  positionHealth: PositionHealthInput;
+  assetRisk: AssetRiskInput;
+  systemicRisk: SystemicRiskInput;
+}
+
+export interface SubScores {
+  positionHealth: number;
+  assetRisk: number;
+  protocolSafety: number;
+  systemicRisk: number;
+}
+
+export interface ScoreResult {
+  /** Composite Panik Risk Score, integer 0–100. Higher = more risk. */
+  total: number;
+  band: Band;
+  subScores: SubScores;
+}

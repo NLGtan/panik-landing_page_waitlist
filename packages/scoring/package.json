@@ -1,0 +1,20 @@
+{
+  "name": "@panik/scoring",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "PANIK Risk Scoring Engine — pure scoring core (no I/O). Spec: docs/technical-docs/arch",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "~5.8.2",
+    "vitest": "^3.0.0"
+  },
+  "dependencies": {
+    "viem": "^2.52.2"
+  }
+}

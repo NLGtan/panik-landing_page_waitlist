@@ -1,14 +1,21 @@
 {
-  "name": "react-example",
+  "name": "panik",
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test:scoring": "npm run test --workspace=@panik/scoring",
+    "ping:apis": "node --env-file=.env scripts/ping-apis.mjs",
+    "demo:scores": "node --env-file=.env --import tsx scripts/score-demo.ts",
+    "demo:watch": "node --env-file=.env --import tsx scripts/watch-demo.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

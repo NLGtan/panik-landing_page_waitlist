@@ -1,0 +1,59 @@
+/**
+ * Chain-read plumbing for active mode (SYSTEM_ARCHITECTURE §3.4).
+ * Base mainnet addresses + minimal ABIs. The readers depend on a structural
+ * subset of viem's PublicClient so tests can stub it with a plain object.
+ */
+
+import { parseAbi } from "viem";
+
+/** Structural subset of viem's PublicClient used by the readers. */
+export interface PublicClientLike {
+  multicall(args: {
+    contracts: readonly unknown[];
+    allowFailure: true;
+  }): Promise<{ status: "success" | "failure"; result?: unknown }[]>;
+  readContract(args: unknown): Promise<unknown>;
+}
+
+// ── Base mainnet addresses ────────────────────────────────────────────────
+export const AAVE_POOL_BASE = "0xA238Dd80C259a72e81d7e4664a9801593F98d1c5" as const;
+/** Verified live 2026-06-13: getAllMarkets() returns 21 markets. */
+export const MOONWELL_COMPTROLLER_BASE =
+  "0xfBb21d0380beE3312B33c4353c8936a0F13EF26C" as const;
+
+/** Aave V3 reserves we track for collateral discovery (underlying tokens). */
+export const KNOWN_AAVE_RESERVES = [
+  { symbol: "WETH", address: "0x4200000000000000000000000000000000000006", decimals: 18 },
+  { symbol: "USDC", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6 },
+  { symbol: "wstETH", address: "0xc1CBa3fCea344f92D9239c08C0568f6F2F0ee452", decimals: 18 },
+  { symbol: "cbBTC", address: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf", decimals: 8 },
+] as const;
+
+// ── ABIs (minimal, human-readable) ────────────────────────────────────────
+export const aavePoolAbi = parseAbi([
+  "function getUserAccountData(address user) view returns (uint256 totalCollateralBase, uint256 totalDebtBase, uint256 availableBorrowsBase, uint256 currentLiquidationThreshold, uint256 ltv, uint256 healthFactor)",
+  "function getReserveData(address asset) view returns ((uint256 configuration, uint128 liquidityIndex, uint128 currentLiquidityRate, uint128 variableBorrowIndex, uint128 currentVariableBorrowRate, uint128 currentStableBorrowRate, uint40 lastUpdateTimestamp, uint16 id, address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress, address interestRateStrategyAddress, uint128 accruedToTreasury, uint128 unbacked, uint128 isolationModeTotalDebt))",
+]);
+
+export const comptrollerAbi = parseAbi([
+  "function getAssetsIn(address account) view returns (address[])",
+  "function markets(address mToken) view returns (bool isListed, uint256 collateralFactorMantissa)",
+  "function oracle() view returns (address)",
+]);
+
+export const mTokenAbi = parseAbi([
+  "function balanceOf(address owner) view returns (uint256)",
+  "function borrowBalanceStored(address account) view returns (uint256)",
+  "function exchangeRateStored() view returns (uint256)",
+  "function underlying() view returns (address)",
+]);
+
+export const oracleAbi = parseAbi([
+  "function getUnderlyingPrice(address mToken) view returns (uint256)",
+]);
+
+export const erc20Abi = parseAbi([
+  "function balanceOf(address owner) view returns (uint256)",
+  "function symbol() view returns (string)",
+  "function decimals() view returns (uint8)",
+]);
