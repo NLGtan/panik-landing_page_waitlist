@@ -1,0 +1,239 @@
+# PANIK — V1 Risk Scoring Engine
+
+## Context
+
+DeFi position risk monitor on Base mainnet. Monitors Aave V3 + Moonwell positions.
+Goal: simple working risk score per position. No historical validation needed for v1.
+
+---
+
+## Stack
+
+- **Chain**: Base mainnet
+- **Protocols**: Aave V3, Moonwell (Compound V2 fork)
+- **Data**: Goldsky + Dune (primary), The Graph (fallback), Chainlink, CoinGecko, DefiLlama
+- **ML**: v1 = weighted formula only. v2 = XGBoost/LightGBM (future)
+
+---
+
+## Composite Score
+
+```
+S_total = 0.40 * S_position_health
+        + 0.25 * S_asset_risk
+        + 0.20 * S_protocol_safety
+        + 0.15 * S_systemic_risk
+
+// All sub-scores: 0–100. Higher = more risk.
+// clamp(S_total, 0, 100)
+```
+
+### Bands
+
+| Score  | Label    | Action                       |
+| ------ | -------- | ---------------------------- |
+| 0–24   | Low      | No alert                     |
+| 25–49  | Elevated | Watch — Approaching          |
+| 50–74  | High     | Advisor alert                |
+| 75–100 | Critical | Advisor alert + exit offered |
+
+---
+
+## Sub-Scores
+
+### 1. Position Health (40%)
+
+```python
+# Inputs: Goldsky + Chainlink
+HF_CEIL = 2.0  # tune if needed
+
+HF_score = clamp((HF_CEIL - health_factor) / (HF_CEIL - 1.0) * 100, 0, 100)
+LTV_score = clamp((current_ltv / max_ltv) * 100, 0, 100)
+
+S_position_health = clamp(0.70 * HF_score + 0.30 * LTV_score, 0, 100)
+```
+
+**Aave V3**: `getUserAccountData()` → returns `healthFactor` as uint256 (÷1e18)
+**Moonwell**: No native HF. Derive manually:
+
+```python
+# From Comptroller.getAccountLiquidity() → (err, liquidity, shortfall)
+# See: https://docs.moonwell.fi/moonwell/protocol-information/protocol-information
+health_factor = (collateral_value * liquidation_threshold) / borrow_value
+# shortfall > 0 means already undercollateralised (HF < 1.0)
+```
+
+---
+
+### 2. Asset Risk (25%)
+
+```python
+# Inputs: CoinGecko (history), Chainlink (live price)
+vol_30d = std_dev(daily_returns, 30) * sqrt(365)  # annualised
+drawdown_90d = (max_price_90d - min_price_90d) / max_price_90d
+corr_btc = pearson_corr(asset_returns, btc_returns, 30)
+
+VOL_CEIL = 1.0  # 100% annualised — tune from data
+
+vol_score      = clamp(vol_30d / VOL_CEIL * 100, 0, 100)
+drawdown_score = clamp(drawdown_90d * 100, 0, 100)
+corr_penalty   = clamp(corr_btc, 0, 1) * 100
+
+S_asset_risk = clamp(
+  0.50 * vol_score + 0.35 * drawdown_score + 0.15 * corr_penalty,
+  0, 100
+)
+```
+
+---
+
+### 3. Protocol Safety (20%)
+
+Static config — hardcoded, no runtime query. Update manually on new events.
+
+```python
+# Higher raw_safety = safer protocol
+# S_protocol_safety = 100 - raw_safety  (inverted to risk scale)
+
+PROTOCOL_SAFETY = {
+  "aave_v3": {
+    "audit_score":        90,  # multiple top-tier audits
+    "exploit_score":      95,  # no protocol-level insolvency
+    "tvl_stability":      85,
+    "governance":         85,
+    "weights": [0.35, 0.35, 0.20, 0.10]
+    # expected S_protocol_safety ≈ 11 (Low)
+  },
+  "moonwell": {
+    "audit_score":        60,
+    "exploit_score":      40,  # 2 exploits in 8mo (Nov 2025, Feb 2026)
+    "tvl_stability":      65,
+    "governance":         60,
+    "weights": [0.35, 0.35, 0.20, 0.10]
+    # expected S_protocol_safety ≈ 46 (Elevated)
+  }
+}
+
+def compute_protocol_safety(protocol: str) -> float:
+    p = PROTOCOL_SAFETY[protocol]
+    w = p["weights"]
+    raw = w[0]*p["audit_score"] + w[1]*p["exploit_score"] \
+        + w[2]*p["tvl_stability"] + w[3]*p["governance"]
+    return round(100 - raw, 2)
+```
+
+---
+
+### 4. Systemic Risk (15%)
+
+```python
+# Inputs: DefiLlama API (free, no key)
+# /v2/charts → sector TVL | /protocol/{slug} → protocol TVL
+
+tvl_change_7d       = (tvl_now - tvl_7d_ago) / tvl_7d_ago
+proto_tvl_change_7d = (proto_tvl_now - proto_tvl_7d_ago) / proto_tvl_7d_ago
+
+SECTOR_FLOOR = -0.20  # -20% sector TVL = full stress
+PROTO_FLOOR  = -0.15  # -15% protocol TVL = full flight
+
+sector_score       = clamp(-tvl_change_7d / 0.20 * 100, 0, 100)
+proto_flight_score = clamp(-proto_tvl_change_7d / 0.15 * 100, 0, 100)
+
+S_systemic_risk = clamp(
+  0.60 * sector_score + 0.40 * proto_flight_score,
+  0, 100
+)
+# Note: near 0 during stable periods. Spikes during events like FTX.
+# Future inputs: utilization rate, whale activity (v1.1+)
+```
+
+---
+
+## Data Sources
+
+| Source         | What                              | Cadence        | Cost         |
+| -------------- | --------------------------------- | -------------- | ------------ |
+| Goldsky        | Aave V3 + Moonwell position data  | 60s + events   | Free (apply) |
+| Dune Analytics | Protocol data, liquidation events | 60s + events   | Free         |
+| The Graph      | Fallback for Goldsky/Dune         | On failover    | Free         |
+| Chainlink      | Live asset prices (on-chain read) | 60s + triggers | Free         |
+| CoinGecko      | Price history, volatility (30d)   | 60s (cached)   | Free 30/min  |
+| DefiLlama      | TVL history, exploit DB           | 60s            | Free, no key |
+
+### Goldsky + Dune Combined Strategy
+
+- **Goldsky**: real-time position indexing via subgraph/mirror on Base
+- **Dune**: fills gaps where Goldsky subgraph coverage is incomplete (esp. Moonwell)
+- **Failover order**: Goldsky → Dune → The Graph
+- Apply for Goldsky indie/Protocol Camp free tier before integrating
+
+### CoinGecko Rate Limit
+
+30 calls/min on free tier. Cache per-asset per-cycle to avoid hitting limit at 10-user scale.
+
+---
+
+## Scoring Modes
+
+| Mode        | Input                                      | Powers                  |
+| ----------- | ------------------------------------------ | ----------------------- |
+| Prospective | Hypothetical params (LTV, asset, protocol) | Compass recommendations |
+| Active      | Live wallet via Goldsky/Dune               | Watch + Advisor alerts  |
+
+Both modes use the same scoring functions. Only the input source differs.
+
+---
+
+## Risk Profiles
+
+| Profile      | Alert fires at | Approaching zone |
+| ------------ | -------------- | ---------------- |
+| Conservative | Score 25+      | 15–24            |
+| Moderate     | Score 50+      | 40–49            |
+| Aggressive   | Score 75+      | 65–74            |
+
+---
+
+## Build Order (Week 1–2)
+
+```
+1. Implement clamp(), std_dev(), pearson_corr() → unit test with synthetic data
+2. S_position_health → test with mock HF values (1.0, 1.5, 2.0+)
+3. S_asset_risk → connect CoinGecko, test vol calculation
+4. S_protocol_safety → load from config, verify Aave ≈11 Moonwell ≈46
+5. S_systemic_risk → connect DefiLlama, verify near-zero on stable data
+6. Compose S_total → run against a few real positions on Base
+7. Connect Goldsky + Dune → replace mock data with live feeds
+8. Wire prospective mode → Compass
+9. Wire active mode → Watch + Advisor
+```
+
+---
+
+## Open Parameters (tune during build)
+
+| Param        | Default | Notes                               |
+| ------------ | ------- | ----------------------------------- |
+| HF_CEIL      | 2.0     | Ceiling for HF score interpolation  |
+| VOL_CEIL     | 1.0     | 100% annualised vol = full risk     |
+| SECTOR_FLOOR | -0.20   | 20% TVL drop = full systemic stress |
+| PROTO_FLOOR  | -0.15   | 15% protocol TVL drop = full flight |
+
+---
+
+## Open Questions for Mentor
+
+- **Q2**: CoinGecko vs better volatility source? Data can be ETH/EVM L1, not Base-specific.
+- **Q3**: Confirm Aave V3 + Moonwell exploit records are complete before publishing scores.
+- **Q5**: TVL alone insufficient for systemic risk — confirm: utilization rate + whale activity worth adding?
+- **Q6**: Moonwell subgraph on Goldsky/Dune — does one exist or do we build custom?
+- **Q7 (v1/v2)**: Weights validated empirically in v1. V2 = XGBoost/LightGBM. Does that model choice sound right for this data shape?
+
+---
+
+## Notes
+
+- v1 = formula only. No historical crash validation required (per Mentor).
+- v2 = ML layer replaces S_position_health + S_asset_risk where confidence is high.
+- Non-custodial. User funds stay in Aave/Moonwell. Panik never holds funds.
+- Allowlist (10 users) + position cap enforced at contract level, not frontend.

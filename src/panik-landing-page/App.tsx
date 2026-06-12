@@ -66,7 +66,7 @@ export default function App() {
     setIsWaitlistModalOpen(true);
   };
 
-  // Submit hander
+  // Submit handler
   const handleJoinWaitlist = (email: string, source: string = "Authorized Signer") => {
     if (subscribers.some(sub => sub.email.toLowerCase() === email.toLowerCase())) {
       setHasSubscribed(true);
@@ -102,10 +102,9 @@ export default function App() {
   return (
     <div className="relative min-h-screen bg-[#0A0A0B] text-[#F0F4FF] selection:bg-panik-orange/30 selection:text-white overflow-x-clip">
       {/* Navigation section */}
-      <Navigation 
-        onScrollTo={handleScrollToSection} 
-        subscriberCount={subscribers.length} 
-        onLaunchMockup={() => setViewMode("app")}
+      <Navigation
+        onScrollTo={handleScrollToSection}
+        subscriberCount={subscribers.length}
       />
 
       {/* Global continuous background techy globe spanning Hero and Dashboard preview */}

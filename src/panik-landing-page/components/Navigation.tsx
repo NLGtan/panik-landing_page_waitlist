@@ -9,10 +9,9 @@ import { ShieldAlert, Crosshair, ChevronDown, ChevronRight, Compass, Eye, Zap, S
 interface NavigationProps {
   onScrollTo: (sectionId: string) => void;
   subscriberCount: number;
-  onLaunchMockup: () => void;
 }
 
-export function Navigation({ onScrollTo, subscriberCount, onLaunchMockup }: NavigationProps) {
+export function Navigation({ onScrollTo, subscriberCount }: NavigationProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
@@ -106,17 +105,8 @@ export function Navigation({ onScrollTo, subscriberCount, onLaunchMockup }: Navi
             </button>
           </div>
 
-          {/* Right Area (Desktop) */}
-          <div className="hidden md:flex items-center gap-4">
-            {/* Primary Action */}
-            <button 
-              onClick={onLaunchMockup} 
-              className="px-4 py-1.5 bg-panik-orange hover:bg-panik-orange/90 text-white font-mono text-[11px] uppercase tracking-wider font-semibold rounded transition-all duration-300 cursor-pointer"
-              id="btn-nav-join-waitlist"
-            >
-              View App Demo
-            </button>
-          </div>
+          {/* Right Area (Desktop) — spacer to preserve nav balance */}
+          <div className="hidden md:flex items-center gap-4"></div>
 
           {/* Hamburger Menu (Mobile Toggle) */}
           <button 
@@ -162,7 +152,7 @@ export function Navigation({ onScrollTo, subscriberCount, onLaunchMockup }: Navi
             >
               03 // SUPPORTED PROTOCOLS
             </button>
-            <button 
+            <button
               onClick={() => {
                 onScrollTo("faq");
                 setMobileMenuOpen(false);
@@ -170,19 +160,6 @@ export function Navigation({ onScrollTo, subscriberCount, onLaunchMockup }: Navi
               className="block w-full text-left text-sm font-mono text-panik-text-primary hover:text-panik-orange transition-colors"
             >
               04 // FREQUENTLY ASKED QUESTIONS
-            </button>
-          </div>
-
-          <div className="space-y-4 pb-12">
-            <button 
-              onClick={() => {
-                setMobileMenuOpen(false);
-                onLaunchMockup();
-              }}
-              className="w-full py-3 bg-panik-orange text-white font-mono text-xs font-bold uppercase tracking-widest rounded transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <span>VIEW APP DEMO</span>
-              <ChevronRight className="w-4 h-4" />
             </button>
           </div>
         </div>
