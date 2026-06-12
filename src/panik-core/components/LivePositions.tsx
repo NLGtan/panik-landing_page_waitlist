@@ -8,6 +8,7 @@
 import React from "react";
 import { Activity, RadioTower, WifiOff } from "lucide-react";
 import type { LiveWalletPosition } from "../lib/live";
+import { ProtocolLogo } from "./ProtocolLogo";
 
 const PROTOCOL_NAME: Record<LiveWalletPosition["protocol"], string> = {
   aave_v3: "Aave V3",
@@ -81,7 +82,9 @@ export function LivePositions({ positions, updatedAt, offline }: LivePositionsPr
               key={`${p.wallet}:${p.protocol}`}
               className="flex flex-col sm:flex-row justify-between sm:items-center p-4 rounded-xl border border-white/[0.04] bg-[#111318]/50 gap-3"
             >
-              <div className="min-w-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <ProtocolLogo protocol={PROTOCOL_NAME[p.protocol]} size="w-8 h-8" />
+                <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <h4 className="text-xs font-mono font-bold text-white truncate">
                     {PROTOCOL_NAME[p.protocol]} · {p.scoredCollateralSymbol} position
@@ -117,6 +120,7 @@ export function LivePositions({ positions, updatedAt, offline }: LivePositionsPr
                   </span>
                   <span className="text-white/20">•</span>
                   <span className="truncate">{p.wallet.slice(0, 6)}…{p.wallet.slice(-4)}</span>
+                </div>
                 </div>
               </div>
 
