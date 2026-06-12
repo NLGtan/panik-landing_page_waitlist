@@ -6,3 +6,7 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Local-only infra tooling (security: keep ops scripts + DB schema out of the repo)
+scripts/
+supabase/
