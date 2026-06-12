@@ -138,6 +138,54 @@ await check("Goldsky", async () => {
   })`;
 });
 
+// ── 9. Supabase Auth (project URL + publishable key) ─────────────────────
+await check("Supabase (publishable key)", async () => {
+  const url = requireEnv("VITE_SUPABASE_URL");
+  const key = requireEnv("VITE_SUPABASE_PUBLISHABLE_KEY");
+  const { status, body } = await getJson(`${url}/auth/v1/health`, {
+    headers: { apikey: key },
+  });
+  if (status !== 200) throw new Error(`HTTP ${status}: ${JSON.stringify(body).slice(0, 100)}`);
+  return `auth service healthy (${body.name ?? "GoTrue"} ${body.version ?? ""})`.trim();
+});
+
+// ── 10. Supabase REST (secret key — worker-side) ─────────────────────────
+await check("Supabase (secret key)", async () => {
+  const url = requireEnv("SUPABASE_URL");
+  const key = requireEnv("SUPABASE_SECRET_KEY");
+  const { status } = await getJson(`${url}/rest/v1/`, {
+    headers: { apikey: key, authorization: `Bearer ${key}` },
+  });
+  if (status !== 200) throw new Error(`HTTP ${status} — key rejected by PostgREST`);
+  return "REST API accepts the secret key (OpenAPI root returned)";
+});
+
+// ── 11. Supabase direct Postgres (Goldsky Mirror sink path) ──────────────
+// TCP reachability only — full auth is exercised when the worker/pipeline
+// connects with a real pg client. Proves host/port/DNS are right.
+await check("Supabase DB (direct 5432)", async () => {
+  const dbUrl = new URL(requireEnv("SUPABASE_DB_URL"));
+  const net = await import("node:net");
+  await new Promise((resolve, reject) => {
+    const socket = net.connect(
+      { host: dbUrl.hostname, port: Number(dbUrl.port || 5432), timeout: 8000 },
+      () => {
+        socket.end();
+        resolve(undefined);
+      },
+    );
+    socket.on("timeout", () => {
+      socket.destroy();
+      reject(new Error("TCP connect timeout"));
+    });
+    socket.on("error", reject);
+  });
+  const viaPooler = dbUrl.hostname.includes("pooler");
+  return `${dbUrl.hostname}:${dbUrl.port || 5432} reachable (${
+    viaPooler ? "session pooler — IPv4 + long-lived OK" : "direct — requires IPv6"
+  })`;
+});
+
 // ── Report ───────────────────────────────────────────────────────────────
 console.log("\nPANIK API connectivity check\n" + "─".repeat(72));
 for (const r of results) {
