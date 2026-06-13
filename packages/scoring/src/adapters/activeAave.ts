@@ -4,7 +4,7 @@
  * dominant collateral is discovered via aToken balances on known reserves.
  */
 
-import type { PositionHealthInput } from "../types";
+import type { PositionHealthInput, Protocol } from "../types";
 import {
   AAVE_POOL_BASE,
   KNOWN_AAVE_RESERVES,
@@ -17,7 +17,7 @@ import {
 const UINT256_MAX = 2n ** 256n - 1n;
 
 export interface ActiveReading {
-  protocol: "aave_v3" | "moonwell";
+  protocol: Protocol;
   positionHealth: PositionHealthInput;
   collateralValueUsd: number;
   borrowValueUsd: number;

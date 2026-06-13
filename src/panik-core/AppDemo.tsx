@@ -37,6 +37,7 @@ import {
   useCompassScores,
   useLiveScores,
   useProspective,
+  useWalletRegistry,
 } from "./lib/live";
 import { ProtocolLogo } from "./components/ProtocolLogo";
 import { motion, AnimatePresence } from "motion/react";
@@ -46,9 +47,9 @@ type RiskProfile = "conservative" | "moderate" | "aggressive";
 
 interface VaultPreset {
   id: string;
-  protocol: "Aave V3" | "Moonwell";
+  protocol: "Aave V3" | "Moonwell" | "Morpho" | "Compound V3";
   /** Engine identifiers — must match packages/scoring MARKETS + the API's COMPASS_SCENARIOS ids. */
-  engineProtocol: "aave_v3" | "moonwell";
+  engineProtocol: "aave_v3" | "moonwell" | "morpho" | "compound_v3";
   collateralSymbol: string;
   assetPair: string;
   collateralAsset: string;
@@ -174,6 +175,42 @@ const VAULT_PRESETS: VaultPreset[] = [
     protocolCount: 45,
     poolCount: 24,
     positionCount: 32
+  },
+  {
+    id: "morpho-weth-loop",
+    protocol: "Morpho",
+    engineProtocol: "morpho",
+    collateralSymbol: "WETH",
+    assetPair: "WETH / USDC MARKET (86% LLTV)",
+    collateralAsset: "WETH",
+    debtAsset: "USDC",
+    defaultCollateral: 2.4,
+    defaultBorrow: 2400,
+    defaultPrice: 1667,
+    apy: 7.8,
+    baseRisk: 38,
+    riskStatus: "ELEVATED",
+    protocolCount: 28,
+    poolCount: 31,
+    positionCount: 22
+  },
+  {
+    id: "compound-weth-borrow",
+    protocol: "Compound V3",
+    engineProtocol: "compound_v3",
+    collateralSymbol: "WETH",
+    assetPair: "WETH / USDC COMET",
+    collateralAsset: "WETH",
+    debtAsset: "USDC",
+    defaultCollateral: 1.8,
+    defaultBorrow: 1500,
+    defaultPrice: 1667,
+    apy: 6.1,
+    baseRisk: 30,
+    riskStatus: "ELEVATED",
+    protocolCount: 19,
+    poolCount: 9,
+    positionCount: 11
   }
 ];
 
@@ -211,14 +248,18 @@ export function AppDemo() {
   // "ALL" remains as the ops/registry view. SIWE later replaces this with
   // the connected wallet.
   const [selectedWallet, setSelectedWallet] = useState<string | "all" | null>(null); // null = not yet initialised
+  const registry = useWalletRegistry();
   const wallets = useMemo(() => {
+    // Registry is the source of truth: wallets with zero readable positions
+    // still get a pill (their panel shows "no open positions" honestly).
+    if (registry) return registry.map((r) => ({ wallet: r.wallet, label: r.label }));
     if (!livePositions) return [];
     const seen = new Map<string, { wallet: string; label: string | null }>();
     for (const p of livePositions) {
       if (!seen.has(p.wallet)) seen.set(p.wallet, { wallet: p.wallet, label: p.label });
     }
     return [...seen.values()];
-  }, [livePositions]);
+  }, [registry, livePositions]);
 
   useEffect(() => {
     if (selectedWallet === null && wallets.length > 0) {

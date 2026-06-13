@@ -69,6 +69,16 @@
 - [ ] Each recommendation: expected yield, risk score, plain-language explanation, worst-case scenario
 - [ ] First 3 external users onboarded (biz Risk 5 — they test onboarding + recommendations only)
 
+### Protocol expansion (2026-06-13 — beyond camp's two-protocol baseline)
+- [x] **Morpho + Compound V3 in the engine** (prospective/Compass only): types, researched
+      protocol-safety configs (Morpho 20.5, Compound V3 18.85 — pending the same Q3 verification
+      bar), market params (Morpho 86% LLTV tier; Comet borrowCF/liqCF), DefiLlama slugs verified
+      live, 2 new Compass scenarios, Morpho/Compound logos. Risk ordering asserted in tests:
+      Aave < Compound V3 < Morpho < Moonwell. 90 tests green.
+- [ ] Compound V3 active reader (Comet `borrowBalanceOf` + `userCollateral`) — Slice 2 buffer item
+- [ ] Morpho active reader — post-mid-demo; market discovery via the Mirror event stream or Morpho API
+- [ ] Biz dev/mentor sign-off on 4-protocol scope (their plan committed to 2 done well)
+
 ### Slice 1 pass criteria (from biz plan)
 - [ ] Scores display correctly for known positions
 - [ ] Conservative user sees only 0–24 positions recommended; Moderate 0–49
@@ -119,11 +129,16 @@
 - [ ] Scenario catalog: most common risk scenarios across both protocols
 - [ ] Four-section format: What happened / Why it matters for you / Protocol context / What Panik recommends (with $ + gas costs)
 - [ ] New data feeds: Aave governance proposals (Tally/Snapshot), utilization trends, exploit history (DefiLlama)
-- [ ] **Goldsky Mirror pipeline → Supabase Postgres**: stream Aave V3 + Moonwell Base events
-      (Borrow/Repay/Supply/Withdraw/LiquidationCall) — powers Advisor "What happened" with verifiable
-      on-chain facts + payment-reconciliation later. Free tier: 1 pipeline / 1M records/mo.
-      Setup: `GOLDSKY_PROJECT_ID`/`GOLDSKY_API_KEY` in .env → CLI `goldsky login` → pipeline config
-      (postgres sink → Supabase connection string). Docs: docs.goldsky.com/mirror/about-pipeline
+- [x] **Goldsky Mirror pipeline → Supabase Postgres** — ✅ DEPLOYED 2026-06-13 (`panik-lending-events`,
+      status ACTIVE). Streams **four protocols** on Base (Aave V3 Pool, Moonwell 21 mTokens, Morpho Blue,
+      Compound V3 cUSDCv3+cWETHv3) into `onchain.lending_events`: lend/borrow/repay/withdraw/liquidation
+      events, names normalized, user extracted from topics/data, raw topics+data retained for
+      re-derivation. Topic0 hashes computed with viem (never hand-typed); all sink addresses verified
+      on-chain pre-deploy. Config generator: `scripts/goldsky/gen-config.mjs`; sanity check:
+      `node --env-file=.env scripts/goldsky/check-events.mjs`. `start_at: latest` (no backfill — budget).
+      ⚠ v1 caveats: amounts not decoded (raw data kept); Morpho per-event topic positions to verify
+      against real rows.
+- [ ] Wire event triggers: watched-wallet event in `lending_events` ⇒ immediate re-score (worker task)
 - [ ] Four-option response UI: Recommended / Alternative / Adjust profile / Dismiss
 - [ ] Recommendation copy reviewed by ≥3 real DeFi users before ship (biz Risk 4)
 

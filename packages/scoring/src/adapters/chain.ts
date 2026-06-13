@@ -57,3 +57,38 @@ export const erc20Abi = parseAbi([
   "function symbol() view returns (string)",
   "function decimals() view returns (uint8)",
 ]);
+
+// ── Compound V3 (Comet) — Base mainnet ────────────────────────────────────
+/** Symbols verified on-chain 2026-06-13 (cUSDCv3 / cWETHv3). */
+export const COMETS_BASE = [
+  {
+    address: "0xb125E6687d4313864e53df431d5425969c15Eb2F",
+    baseSymbol: "USDC",
+    /** getPrice() values are denominated in USD for this market. */
+    priceInEth: false,
+  },
+  {
+    address: "0x46e6b214b524310239732D51387075E0e70970bf",
+    baseSymbol: "WETH",
+    /** getPrice() values are ETH-denominated — convert via ETH/USD feed. */
+    priceInEth: true,
+  },
+] as const;
+
+/** Chainlink ETH/USD on Base (verified via description() 2026-06-13). */
+export const CHAINLINK_ETH_USD_BASE =
+  "0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70" as const;
+
+export const cometAbi = parseAbi([
+  "function numAssets() view returns (uint8)",
+  "function getAssetInfo(uint8 i) view returns ((uint8 offset, address asset, address priceFeed, uint64 scale, uint64 borrowCollateralFactor, uint64 liquidateCollateralFactor, uint64 liquidationFactor, uint128 supplyCap))",
+  "function userCollateral(address account, address asset) view returns (uint128 balance, uint128 reserved)",
+  "function borrowBalanceOf(address account) view returns (uint256)",
+  "function baseTokenPriceFeed() view returns (address)",
+  "function baseScale() view returns (uint64)",
+  "function getPrice(address priceFeed) view returns (uint128)",
+]);
+
+export const chainlinkAggregatorAbi = parseAbi([
+  "function latestRoundData() view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)",
+]);

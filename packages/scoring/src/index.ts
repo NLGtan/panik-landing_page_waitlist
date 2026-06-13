@@ -13,6 +13,8 @@ export * from "./adapters/prospective";
 export * from "./adapters/chain";
 export { AaveActiveReader, type ActiveReading } from "./adapters/activeAave";
 export { MoonwellActiveReader } from "./adapters/activeMoonwell";
+export { CompoundActiveReader } from "./adapters/activeCompound";
+export { MorphoActiveReader } from "./adapters/activeMorpho";
 export * from "./adapters/active";
 export * from "./watch/loop";
 export * from "./providers/types";

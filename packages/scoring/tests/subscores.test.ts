@@ -20,6 +20,15 @@ describe("S_protocol_safety (static config — arch step 4)", () => {
       scoreProtocolSafety("aave_v3") + 30,
     );
   });
+  it("Morpho = 20.5, Compound V3 = 18.85 (added 2026-06-13, pending Q3 verification)", () => {
+    expect(scoreProtocolSafety("morpho")).toBeCloseTo(20.5, 2);
+    expect(scoreProtocolSafety("compound_v3")).toBeCloseTo(18.85, 2);
+  });
+  it("protocol risk ordering: Aave < Compound V3 < Morpho < Moonwell", () => {
+    expect(scoreProtocolSafety("aave_v3")).toBeLessThan(scoreProtocolSafety("compound_v3"));
+    expect(scoreProtocolSafety("compound_v3")).toBeLessThan(scoreProtocolSafety("morpho"));
+    expect(scoreProtocolSafety("morpho")).toBeLessThan(scoreProtocolSafety("moonwell"));
+  });
 });
 
 // ── arch step 2: mock HF values 1.0 / 1.5 / 2.0+ ─────────────────────────

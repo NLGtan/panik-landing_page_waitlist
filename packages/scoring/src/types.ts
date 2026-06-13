@@ -4,7 +4,7 @@
  * a ScoringInput and call computeScore. See SYSTEM_ARCHITECTURE.md §3.6.
  */
 
-export type Protocol = "aave_v3" | "moonwell";
+export type Protocol = "aave_v3" | "moonwell" | "morpho" | "compound_v3";
 
 export type Band = "LOW" | "ELEVATED" | "HIGH" | "CRITICAL";
 

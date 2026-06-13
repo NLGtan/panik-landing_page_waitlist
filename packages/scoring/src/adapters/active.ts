@@ -33,11 +33,20 @@ export class ActiveAdapter {
       assetRisk: AssetRiskProvider;
       systemic: SystemicRiskProvider;
     },
+    /** Optional: notified when an individual reader throws (others continue). */
+    private readonly onReaderError?: (error: unknown) => void,
   ) {}
 
   /** Scores every position the wallet holds across registered protocols. */
   async scoreWallet(wallet: string): Promise<ActiveScore[]> {
-    const readings = await Promise.all(this.readers.map((r) => r.read(wallet)));
+    // Per-reader isolation: a single protocol's failure (e.g. the Morpho API
+    // being down) must not drop the other protocols' legs for this wallet.
+    const settled = await Promise.allSettled(this.readers.map((r) => r.read(wallet)));
+    const readings = settled.map((s) => {
+      if (s.status === "fulfilled") return s.value;
+      this.onReaderError?.(s.reason);
+      return null;
+    });
     const scores: ActiveScore[] = [];
 
     for (const reading of readings) {

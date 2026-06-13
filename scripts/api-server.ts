@@ -20,9 +20,11 @@ import {
   AaveActiveReader,
   ActiveAdapter,
   CoinGeckoProvider,
+  CompoundActiveReader,
   DefiLlamaProvider,
   MARKETS,
   MoonwellActiveReader,
+  MorphoActiveReader,
   scoreProspective,
   statusFor,
   type ActiveScore,
@@ -52,8 +54,14 @@ const providers = {
 };
 
 const adapter = new ActiveAdapter(
-  [new AaveActiveReader(chain), new MoonwellActiveReader(chain)],
+  [
+    new AaveActiveReader(chain),
+    new MoonwellActiveReader(chain),
+    new CompoundActiveReader(chain),
+    new MorphoActiveReader(), // official Morpho API (market discovery needs an index)
+  ],
   providers,
+  (err) => console.error(`reader failed (other protocols continue): ${(err as Error).message.slice(0, 120)}`),
 );
 
 const db = new pg.Pool({
@@ -111,6 +119,8 @@ const COMPASS_SCENARIOS: {
   { id: "aave-weth-borrow", protocol: "aave_v3", collateralSymbol: "WETH", collateralValueUsd: 5000, borrowValueUsd: 2000 },
   { id: "moonwell-weth-debt", protocol: "moonwell", collateralSymbol: "WETH", collateralValueUsd: 2000, borrowValueUsd: 1300 },
   { id: "moonwell-cbeth-max", protocol: "moonwell", collateralSymbol: "cbETH", collateralValueUsd: 1500, borrowValueUsd: 1050 },
+  { id: "morpho-weth-loop", protocol: "morpho", collateralSymbol: "WETH", collateralValueUsd: 4000, borrowValueUsd: 2400 },
+  { id: "compound-weth-borrow", protocol: "compound_v3", collateralSymbol: "WETH", collateralValueUsd: 3000, borrowValueUsd: 1500 },
 ];
 
 let compassCache: { at: number; scores: unknown[] } = { at: 0, scores: [] };
@@ -156,6 +166,19 @@ const app = express();
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, cachedAt: scoresCache.at, positions: scoresCache.positions.length });
+});
+
+// Watch registry — the UI's wallet selector source (so wallets with no
+// readable positions still get a pill instead of vanishing).
+app.get("/api/wallets", async (_req, res) => {
+  try {
+    const { rows } = await db.query(
+      "select wallet, risk_profile, label from public.watched_wallets where is_active order by created_at",
+    );
+    res.json({ wallets: rows });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
 });
 
 app.get("/api/scores", async (_req, res) => {

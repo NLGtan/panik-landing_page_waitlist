@@ -27,6 +27,28 @@ export function ProtocolLogo({ protocol, size = "w-6 h-6" }: { protocol: string;
       </div>
     );
   }
+  if (protocol.toLowerCase().includes("morpho")) {
+    return (
+      <div className={`rounded-xl overflow-hidden shrink-0 ${size} flex items-center justify-center bg-[#2470FF] p-1.5 border border-white/[0.08]`}>
+        <svg viewBox="0 0 100 100" className="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
+          {/* Morpho butterfly — two mirrored wings */}
+          <path d="M 50,22 C 38,34 24,38 16,38 C 16,56 30,72 48,78 L 50,60 Z" fill="#FFFFFF" />
+          <path d="M 50,22 C 62,34 76,38 84,38 C 84,56 70,72 52,78 L 50,60 Z" fill="#FFFFFF" opacity="0.85" />
+        </svg>
+      </div>
+    );
+  }
+  if (protocol.toLowerCase().includes("compound")) {
+    return (
+      <div className={`rounded-xl overflow-hidden shrink-0 ${size} flex items-center justify-center bg-[#0D0E12] border border-white/[0.08] p-1.5`}>
+        <svg viewBox="0 0 100 100" className="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M15 30 H85 V42 H15 Z" fill="#00D395" />
+          <path d="M15 48 H85 V60 H15 Z" fill="#00D395" opacity="0.8" />
+          <path d="M15 66 H85 V78 H15 Z" fill="#00D395" opacity="0.6" />
+        </svg>
+      </div>
+    );
+  }
   return (
     <div className={`rounded-xl bg-orange-500/15 border border-panik-orange/30 flex items-center justify-center font-mono font-bold text-xs text-panik-orange shrink-0 ${size}`}>
       {protocol[0]}

@@ -45,7 +45,7 @@ create trigger trg_watched_wallets_updated
 create table if not exists public.score_snapshots (
   id                  bigint generated always as identity primary key,
   wallet              text not null,
-  protocol            text not null check (protocol in ('aave_v3','moonwell')),
+  protocol            text not null check (protocol in ('aave_v3','moonwell','morpho','compound_v3')),
   total               smallint not null check (total between 0 and 100),
   band                text not null check (band in ('LOW','ELEVATED','HIGH','CRITICAL')),
   sub_scores          jsonb not null,  -- {positionHealth, assetRisk, protocolSafety, systemicRisk}
@@ -67,7 +67,7 @@ create index if not exists idx_snapshots_wallet_proto_time
 create table if not exists public.watch_transitions (
   id             bigint generated always as identity primary key,
   wallet         text not null,
-  protocol       text not null check (protocol in ('aave_v3','moonwell')),
+  protocol       text not null check (protocol in ('aave_v3','moonwell','morpho','compound_v3')),
   risk_profile   text not null
                  check (risk_profile in ('conservative','moderate','aggressive')),
   score          smallint not null check (score between 0 and 100),
@@ -114,7 +114,7 @@ create schema if not exists onchain;
 
 create table if not exists onchain.lending_events (
   id              text primary key,        -- Goldsky stable event id (re-org-safe upsert key)
-  protocol        text not null,           -- 'aave_v3' | 'moonwell'
+  protocol        text not null,           -- aave_v3 | moonwell | morpho | compound_v3
   event_name      text not null,           -- Borrow|Repay|Supply|Withdraw|LiquidationCall
   user_address    text,
   related_address text,                    -- onBehalfOf / liquidator
@@ -125,7 +125,11 @@ create table if not exists onchain.lending_events (
   tx_hash         text not null,
   log_index       integer,
   block_number    bigint not null,
-  block_time      timestamptz not null
+  block_time      timestamptz not null,
+  -- Raw log payload retained so user/amount extraction can be re-derived
+  -- offline (the Mirror transform's per-event topic positions are v1).
+  topics          text,
+  data            text
 );
 
 create index if not exists idx_lending_events_user_time

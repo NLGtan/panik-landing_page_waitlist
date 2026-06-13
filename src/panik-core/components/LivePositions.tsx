@@ -13,6 +13,8 @@ import { ProtocolLogo } from "./ProtocolLogo";
 const PROTOCOL_NAME: Record<LiveWalletPosition["protocol"], string> = {
   aave_v3: "Aave V3",
   moonwell: "Moonwell",
+  morpho: "Morpho",
+  compound_v3: "Compound V3",
 };
 
 function bandStyle(band: LiveWalletPosition["band"]): string {

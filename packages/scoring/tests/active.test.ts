@@ -120,6 +120,111 @@ describe("MoonwellActiveReader", () => {
   });
 });
 
+describe("MorphoActiveReader (official API)", async () => {
+  const { MorphoActiveReader } = await import("../src/adapters/activeMorpho");
+  const apiBody = (items: unknown[]) =>
+    ({ ok: true, status: 200, json: async () => ({ data: { marketPositions: { items } } }) }) as unknown as Response;
+
+  it("aggregates isolated markets with MIN health factor and filters closed ones", async () => {
+    const reader = new MorphoActiveReader(async () =>
+      apiBody([
+        {
+          healthFactor: 1.5,
+          state: { collateralUsd: 1000, borrowAssetsUsd: 500 },
+          market: { lltv: "860000000000000000", collateralAsset: { symbol: "WETH" }, loanAsset: { symbol: "USDC" } },
+        },
+        {
+          healthFactor: 1.1, // the at-risk leg must drive the aggregate
+          state: { collateralUsd: 3000, borrowAssetsUsd: 2500 },
+          market: { lltv: "945000000000000000", collateralAsset: { symbol: "cbETH" }, loanAsset: { symbol: "WETH" } },
+        },
+        {
+          healthFactor: null, // closed market — must be ignored
+          state: { collateralUsd: 0, borrowAssetsUsd: 0 },
+          market: { lltv: "860000000000000000", collateralAsset: { symbol: "cbBTC" }, loanAsset: { symbol: "USDC" } },
+        },
+      ]),
+    );
+    const r = await reader.read("0xw");
+    expect(r?.positionHealth.healthFactor).toBeCloseTo(1.1, 9);
+    expect(r?.collateralValueUsd).toBeCloseTo(4000, 6);
+    expect(r?.borrowValueUsd).toBeCloseTo(3000, 6);
+    // weighted LLTV: (1000×0.86 + 3000×0.945) / 4000 = 0.92375
+    expect(r?.positionHealth.maxLtv).toBeCloseTo(0.92375, 6);
+    expect(r?.dominantCollateralSymbol).toBe("cbETH");
+  });
+
+  it("returns null when all markets are closed", async () => {
+    const reader = new MorphoActiveReader(async () =>
+      apiBody([
+        {
+          healthFactor: null,
+          state: { collateralUsd: 0, borrowAssetsUsd: 0 },
+          market: { lltv: "860000000000000000", collateralAsset: { symbol: "WETH" }, loanAsset: { symbol: "USDC" } },
+        },
+      ]),
+    );
+    expect(await reader.read("0xempty")).toBeNull();
+  });
+});
+
+describe("CompoundActiveReader (Comet)", async () => {
+  const { CompoundActiveReader } = await import("../src/adapters/activeCompound");
+
+  it("derives HF from liquidateCollateralFactor and converts ETH-quoted markets to USD", async () => {
+    // One synthetic ETH-quoted comet (like cWETHv3): 1 asset, ETH/USD = $2000.
+    const comets = [{ address: "0xcomet", baseSymbol: "WETH", priceInEth: true }] as never;
+    const multicall = vi
+      .fn()
+      // head: numAssets, borrowBalanceOf, baseTokenPriceFeed, baseScale, ETH/USD round
+      .mockResolvedValueOnce([
+        ok(1),
+        ok(1n * 10n ** 18n), // borrow: 1 WETH
+        ok("0xbasefeed"),
+        ok(10n ** 18n),
+        ok([0n, 2000_00000000n, 0n, 0n, 0n]), // ETH/USD $2000
+      ])
+      // getAssetInfo(0): cbETH collateral, scale 1e18, borrowCF 0.75, liqCF 0.80
+      .mockResolvedValueOnce([
+        ok({
+          offset: 0,
+          asset: "0xcbeth",
+          priceFeed: "0xcbethfeed",
+          scale: 10n ** 18n,
+          borrowCollateralFactor: 750000000000000000n,
+          liquidateCollateralFactor: 800000000000000000n,
+        }),
+      ])
+      // base price (1.0 in ETH terms), userCollateral (2 cbETH), cbETH price (1.05 ETH)
+      .mockResolvedValueOnce([ok(1_00000000n), ok([2n * 10n ** 18n, 0n]), ok(1_05000000n)])
+      // dominant symbol lookup
+      .mockResolvedValueOnce([ok("cbETH")]);
+
+    const client = { multicall, readContract: vi.fn() } as unknown as PublicClientLike;
+    const r = await new CompoundActiveReader(client, comets).read("0xw");
+
+    // collateral: 2 × 1.05 ETH × $2000 = $4200; borrow: 1 × 1.0 × $2000 = $2000
+    expect(r?.collateralValueUsd).toBeCloseTo(4200, 6);
+    expect(r?.borrowValueUsd).toBeCloseTo(2000, 6);
+    expect(r?.positionHealth.healthFactor).toBeCloseTo((4200 * 0.8) / 2000, 6); // 1.68
+    expect(r?.positionHealth.maxLtv).toBeCloseTo(0.75, 6);
+    expect(r?.dominantCollateralSymbol).toBe("cbETH");
+  });
+
+  it("returns null for wallets with no Comet usage", async () => {
+    const comets = [{ address: "0xcomet", baseSymbol: "USDC", priceInEth: false }] as never;
+    const multicall = vi
+      .fn()
+      .mockResolvedValueOnce([ok(1), ok(0n), ok("0xbf"), ok(10n ** 6n), ok([0n, 1n, 0n, 0n, 0n])])
+      .mockResolvedValueOnce([
+        ok({ offset: 0, asset: "0xa", priceFeed: "0xf", scale: 10n ** 18n, borrowCollateralFactor: 1n, liquidateCollateralFactor: 1n }),
+      ])
+      .mockResolvedValueOnce([ok(1_00000000n), ok([0n, 0n]), ok(1_00000000n)]);
+    const client = { multicall, readContract: vi.fn() } as unknown as PublicClientLike;
+    expect(await new CompoundActiveReader(client, comets).read("0xempty")).toBeNull();
+  });
+});
+
 describe("ActiveAdapter", () => {
   const calmAsset: AssetRiskInput = {
     dailyReturns30d: Array(30).fill(0),
@@ -159,5 +264,33 @@ describe("ActiveAdapter", () => {
     expect(scores[0]?.band).toBe("CRITICAL"); // HF 1.05 → proximity floor
     expect(scores[0]?.assetRiskIsProxy).toBe(true);
     expect(scores[0]?.scoredCollateralSymbol).toBe("WETH (proxy)");
+  });
+
+  it("isolates a failing reader — other protocols still score", async () => {
+    const onReaderError = vi.fn();
+    const adapter = new ActiveAdapter(
+      [
+        { read: async () => { throw new Error("Morpho API: HTTP 503"); } },
+        {
+          read: async () => ({
+            protocol: "aave_v3" as const,
+            positionHealth: { healthFactor: 2.0, currentLtv: 0.4, maxLtv: 0.8 },
+            collateralValueUsd: 1000,
+            borrowValueUsd: 400,
+            dominantCollateralSymbol: "WETH",
+          }),
+        },
+      ],
+      {
+        assetRisk: { getAssetRiskInput: async () => calmAsset },
+        systemic: { getSystemicRiskInput: async () => calmSystemic },
+      },
+      onReaderError,
+    );
+
+    const scores = await adapter.scoreWallet("0xw");
+    expect(scores).toHaveLength(1); // the Aave leg survived the Morpho failure
+    expect(scores[0]?.protocol).toBe("aave_v3");
+    expect(onReaderError).toHaveBeenCalledOnce();
   });
 });

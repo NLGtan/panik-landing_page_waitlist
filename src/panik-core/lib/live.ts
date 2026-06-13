@@ -15,8 +15,10 @@ export interface SubScores {
   systemicRisk: number;
 }
 
+export type LiveProtocol = "aave_v3" | "moonwell" | "morpho" | "compound_v3";
+
 export interface LiveWalletPosition {
-  protocol: "aave_v3" | "moonwell";
+  protocol: LiveProtocol;
   wallet: string;
   total: number;
   band: Band;
@@ -101,6 +103,18 @@ export function useCompassScores() {
     ? Object.fromEntries(data.scores.map((s) => [s.id, s]))
     : null;
   return { scores: byId, offline };
+}
+
+export interface RegistryWallet {
+  wallet: string;
+  risk_profile: string;
+  label: string | null;
+}
+
+/** The watch registry — selector source, independent of scoreability. */
+export function useWalletRegistry() {
+  const { data } = usePolled<{ wallets: RegistryWallet[] }>("/api/wallets", 60_000);
+  return data?.wallets ?? null;
 }
 
 /** Real Base block number + gas price (15s). */

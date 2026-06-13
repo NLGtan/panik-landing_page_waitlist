@@ -1,0 +1,88 @@
+name: panik-lending-events
+apiVersion: 3
+sources:
+  aave_logs:
+    type: dataset
+    dataset_name: base.raw_logs
+    version: 1.0.0
+    start_at: latest
+    filter: address = '0xa238dd80c259a72e81d7e4664a9801593f98d1c5'
+  morpho_logs:
+    type: dataset
+    dataset_name: base.raw_logs
+    version: 1.0.0
+    start_at: latest
+    filter: address = '0xbbbbbbbbbb9cc5e90e3b3af64bdaf62c37eeffcb'
+  comet_usdc_logs:
+    type: dataset
+    dataset_name: base.raw_logs
+    version: 1.0.0
+    start_at: latest
+    filter: address = '0xb125e6687d4313864e53df431d5425969c15eb2f'
+  comet_weth_logs:
+    type: dataset
+    dataset_name: base.raw_logs
+    version: 1.0.0
+    start_at: latest
+    filter: address = '0x46e6b214b524310239732d51387075e0e70970bf'
+  moonwell_logs:
+    type: dataset
+    dataset_name: base.raw_logs
+    version: 1.0.0
+    start_at: latest
+    filter: (topics LIKE '0x4c209b5fc8ad50758f13e2e1088ba56a560dff690a1c6fef26394f4c03821c4f%' OR topics LIKE '0xe5b754fb1abb7f01b499791d0b820ae3b6af3424ac1c59768edb53f4ec31a929%' OR topics LIKE '0x13ed6866d4e1ee6da46f845c46d7e54120883d75c5ea9a2dacc1c4ca8984ab80%' OR topics LIKE '0x1a2a22cb034d26d1854bdc6666a5b91fe25efbbb5dcad3b0355478d6f5c362a1%' OR topics LIKE '0x298637f684da70674f26509b10f07ec2fbc77a335ab1e7d6215a4b2484d8bb52%')
+transforms:
+  t_aave:
+    primary_key: id
+    sql: |
+      SELECT id, transaction_hash AS tx_hash, CAST(log_index AS INT) AS log_index, CAST(block_number AS BIGINT) AS block_number, TO_TIMESTAMP(FROM_UNIXTIME(block_timestamp)) AS block_time, topics, data, 'aave_v3' AS protocol,
+          CASE SPLIT_INDEX(topics, ',', 0) WHEN '0x2b627736bca15cd5381dcf80b0bf11fd197d01a037c52b927a881a10fb73ba61' THEN 'Supply' WHEN '0x3115d1449a7b732c986cba18244e897a450f61e1bb8d589cd2e69e6c8924f9f7' THEN 'Withdraw' WHEN '0xb3d084820fb1a9decffb176436bd02558d15fac9b0ddfed8c465bc7359d7dce0' THEN 'Borrow' WHEN '0xa534c8dbe71f871f9f3530e97a74601fea17b426cae02e1c5aee42c96c784051' THEN 'Repay' WHEN '0xe413a321e8681d831f4dbccbca790d2952b56f977908e45be37335533e005286' THEN 'LiquidationCall' END AS event_name,
+          CASE SPLIT_INDEX(topics, ',', 0) WHEN '0xe413a321e8681d831f4dbccbca790d2952b56f977908e45be37335533e005286' THEN CONCAT('0x', SUBSTRING(SPLIT_INDEX(topics, ',', 3) FROM 27 FOR 40)) ELSE CONCAT('0x', SUBSTRING(SPLIT_INDEX(topics, ',', 2) FROM 27 FOR 40)) END AS user_address
+          FROM aave_logs WHERE SPLIT_INDEX(topics, ',', 0) IN ('0x2b627736bca15cd5381dcf80b0bf11fd197d01a037c52b927a881a10fb73ba61', '0x3115d1449a7b732c986cba18244e897a450f61e1bb8d589cd2e69e6c8924f9f7', '0xb3d084820fb1a9decffb176436bd02558d15fac9b0ddfed8c465bc7359d7dce0', '0xa534c8dbe71f871f9f3530e97a74601fea17b426cae02e1c5aee42c96c784051', '0xe413a321e8681d831f4dbccbca790d2952b56f977908e45be37335533e005286')
+  t_morpho:
+    primary_key: id
+    sql: |
+      SELECT id, transaction_hash AS tx_hash, CAST(log_index AS INT) AS log_index, CAST(block_number AS BIGINT) AS block_number, TO_TIMESTAMP(FROM_UNIXTIME(block_timestamp)) AS block_time, topics, data, 'morpho' AS protocol,
+          CASE SPLIT_INDEX(topics, ',', 0) WHEN '0xedf8870433c83823eb071d3df1caa8d008f12f6440918c20d75a3602cda30fe0' THEN 'Supply' WHEN '0xa56fc0ad5702ec05ce63666221f796fb62437c32db1aa1aa075fc6484cf58fbf' THEN 'Withdraw' WHEN '0x570954540bed6b1304a87dfe815a5eda4a648f7097a16240dcd85c9b5fd42a43' THEN 'Borrow' WHEN '0x52acb05cebbd3cd39715469f22afbf5a17496295ef3bc9bb5944056c63ccaa09' THEN 'Repay' WHEN '0xa3b9472a1399e17e123f3c2e6586c23e504184d504de59cdaa2b375e880c6184' THEN 'Supply' WHEN '0xe80ebd7cc9223d7382aab2e0d1d6155c65651f83d53c8b9b06901d167e321142' THEN 'Withdraw' WHEN '0xa4946ede45d0c6f06a0f5ce92c9ad3b4751452d2fe0e25010783bcab57a67e41' THEN 'LiquidationCall' END AS event_name,
+          CONCAT('0x', SUBSTRING(SPLIT_INDEX(topics, ',', 3) FROM 27 FOR 40)) AS user_address
+          FROM morpho_logs WHERE SPLIT_INDEX(topics, ',', 0) IN ('0xedf8870433c83823eb071d3df1caa8d008f12f6440918c20d75a3602cda30fe0', '0xa56fc0ad5702ec05ce63666221f796fb62437c32db1aa1aa075fc6484cf58fbf', '0x570954540bed6b1304a87dfe815a5eda4a648f7097a16240dcd85c9b5fd42a43', '0x52acb05cebbd3cd39715469f22afbf5a17496295ef3bc9bb5944056c63ccaa09', '0xa3b9472a1399e17e123f3c2e6586c23e504184d504de59cdaa2b375e880c6184', '0xe80ebd7cc9223d7382aab2e0d1d6155c65651f83d53c8b9b06901d167e321142', '0xa4946ede45d0c6f06a0f5ce92c9ad3b4751452d2fe0e25010783bcab57a67e41')
+  t_comet_usdc:
+    primary_key: id
+    sql: |
+      SELECT id, transaction_hash AS tx_hash, CAST(log_index AS INT) AS log_index, CAST(block_number AS BIGINT) AS block_number, TO_TIMESTAMP(FROM_UNIXTIME(block_timestamp)) AS block_time, topics, data, 'compound_v3' AS protocol,
+          CASE SPLIT_INDEX(topics, ',', 0) WHEN '0xd1cf3d156d5f8f0d50f6c122ed609cec09d35c9b9fb3fff6ea0959134dae424e' THEN 'Supply' WHEN '0x9b1bfa7fa9ee420a16e124f794c35ac9f90472acc99140eb2f6447c714cad8eb' THEN 'Withdraw' WHEN '0xfa56f7b24f17183d81894d3ac2ee654e3c26388d17a28dbd9549b8114304e1f4' THEN 'Supply' WHEN '0xd6d480d5b3068db003533b170d67561494d72e3bf9fa40a266471351ebba9e16' THEN 'Withdraw' WHEN '0x1547a878dc89ad3c367b6338b4be6a65a5dd74fb77ae044da1e8747ef1f4f62f' THEN 'LiquidationCall' WHEN '0x9850ab1af75177e4a9201c65a2cf7976d5d28e40ef63494b44366f86b2f9412e' THEN 'LiquidationCall' END AS event_name,
+          CASE SPLIT_INDEX(topics, ',', 0) WHEN '0x9b1bfa7fa9ee420a16e124f794c35ac9f90472acc99140eb2f6447c714cad8eb' THEN CONCAT('0x', SUBSTRING(SPLIT_INDEX(topics, ',', 1) FROM 27 FOR 40)) WHEN '0xd6d480d5b3068db003533b170d67561494d72e3bf9fa40a266471351ebba9e16' THEN CONCAT('0x', SUBSTRING(SPLIT_INDEX(topics, ',', 1) FROM 27 FOR 40)) ELSE CONCAT('0x', SUBSTRING(SPLIT_INDEX(topics, ',', 2) FROM 27 FOR 40)) END AS user_address
+          FROM comet_usdc_logs WHERE SPLIT_INDEX(topics, ',', 0) IN ('0xd1cf3d156d5f8f0d50f6c122ed609cec09d35c9b9fb3fff6ea0959134dae424e', '0x9b1bfa7fa9ee420a16e124f794c35ac9f90472acc99140eb2f6447c714cad8eb', '0xfa56f7b24f17183d81894d3ac2ee654e3c26388d17a28dbd9549b8114304e1f4', '0xd6d480d5b3068db003533b170d67561494d72e3bf9fa40a266471351ebba9e16', '0x1547a878dc89ad3c367b6338b4be6a65a5dd74fb77ae044da1e8747ef1f4f62f', '0x9850ab1af75177e4a9201c65a2cf7976d5d28e40ef63494b44366f86b2f9412e')
+  t_comet_weth:
+    primary_key: id
+    sql: |
+      SELECT id, transaction_hash AS tx_hash, CAST(log_index AS INT) AS log_index, CAST(block_number AS BIGINT) AS block_number, TO_TIMESTAMP(FROM_UNIXTIME(block_timestamp)) AS block_time, topics, data, 'compound_v3' AS protocol,
+          CASE SPLIT_INDEX(topics, ',', 0) WHEN '0xd1cf3d156d5f8f0d50f6c122ed609cec09d35c9b9fb3fff6ea0959134dae424e' THEN 'Supply' WHEN '0x9b1bfa7fa9ee420a16e124f794c35ac9f90472acc99140eb2f6447c714cad8eb' THEN 'Withdraw' WHEN '0xfa56f7b24f17183d81894d3ac2ee654e3c26388d17a28dbd9549b8114304e1f4' THEN 'Supply' WHEN '0xd6d480d5b3068db003533b170d67561494d72e3bf9fa40a266471351ebba9e16' THEN 'Withdraw' WHEN '0x1547a878dc89ad3c367b6338b4be6a65a5dd74fb77ae044da1e8747ef1f4f62f' THEN 'LiquidationCall' WHEN '0x9850ab1af75177e4a9201c65a2cf7976d5d28e40ef63494b44366f86b2f9412e' THEN 'LiquidationCall' END AS event_name,
+          CASE SPLIT_INDEX(topics, ',', 0) WHEN '0x9b1bfa7fa9ee420a16e124f794c35ac9f90472acc99140eb2f6447c714cad8eb' THEN CONCAT('0x', SUBSTRING(SPLIT_INDEX(topics, ',', 1) FROM 27 FOR 40)) WHEN '0xd6d480d5b3068db003533b170d67561494d72e3bf9fa40a266471351ebba9e16' THEN CONCAT('0x', SUBSTRING(SPLIT_INDEX(topics, ',', 1) FROM 27 FOR 40)) ELSE CONCAT('0x', SUBSTRING(SPLIT_INDEX(topics, ',', 2) FROM 27 FOR 40)) END AS user_address
+          FROM comet_weth_logs WHERE SPLIT_INDEX(topics, ',', 0) IN ('0xd1cf3d156d5f8f0d50f6c122ed609cec09d35c9b9fb3fff6ea0959134dae424e', '0x9b1bfa7fa9ee420a16e124f794c35ac9f90472acc99140eb2f6447c714cad8eb', '0xfa56f7b24f17183d81894d3ac2ee654e3c26388d17a28dbd9549b8114304e1f4', '0xd6d480d5b3068db003533b170d67561494d72e3bf9fa40a266471351ebba9e16', '0x1547a878dc89ad3c367b6338b4be6a65a5dd74fb77ae044da1e8747ef1f4f62f', '0x9850ab1af75177e4a9201c65a2cf7976d5d28e40ef63494b44366f86b2f9412e')
+  t_moonwell:
+    primary_key: id
+    sql: |
+      SELECT id, transaction_hash AS tx_hash, CAST(log_index AS INT) AS log_index, CAST(block_number AS BIGINT) AS block_number, TO_TIMESTAMP(FROM_UNIXTIME(block_timestamp)) AS block_time, topics, data, 'moonwell' AS protocol,
+          CASE SPLIT_INDEX(topics, ',', 0) WHEN '0x4c209b5fc8ad50758f13e2e1088ba56a560dff690a1c6fef26394f4c03821c4f' THEN 'Supply' WHEN '0xe5b754fb1abb7f01b499791d0b820ae3b6af3424ac1c59768edb53f4ec31a929' THEN 'Withdraw' WHEN '0x13ed6866d4e1ee6da46f845c46d7e54120883d75c5ea9a2dacc1c4ca8984ab80' THEN 'Borrow' WHEN '0x1a2a22cb034d26d1854bdc6666a5b91fe25efbbb5dcad3b0355478d6f5c362a1' THEN 'Repay' WHEN '0x298637f684da70674f26509b10f07ec2fbc77a335ab1e7d6215a4b2484d8bb52' THEN 'LiquidationCall' END AS event_name,
+          CASE SPLIT_INDEX(topics, ',', 0) WHEN '0x1a2a22cb034d26d1854bdc6666a5b91fe25efbbb5dcad3b0355478d6f5c362a1' THEN CONCAT('0x', SUBSTRING(data FROM 91 FOR 40)) WHEN '0x298637f684da70674f26509b10f07ec2fbc77a335ab1e7d6215a4b2484d8bb52' THEN CONCAT('0x', SUBSTRING(data FROM 91 FOR 40)) ELSE CONCAT('0x', SUBSTRING(data FROM 27 FOR 40)) END AS user_address
+          FROM moonwell_logs WHERE address IN ('0x703843c3379b52f9ff486c9f5892218d2a065cc8', '0x628ff693426583d9a7fb391e54366292f509d457', '0x3bf93770f2d4a794c3d9ebefbaebae2a8f09a5e5', '0x73b06d8d18de422e269645eace15400de7462417', '0xedc817a28e8b93b03976fbd4a3ddbc9f7d176c22', '0x627fe393bc6edda28e99ae648fd6ff362514304b', '0xcb1dacd30638ae38f2b94ea64f066045b7d45f44', '0x73902f619ceb9b31fd8efecf435cbdf89e369ba6', '0xb8051464c8c92209c92f3a4cd9c73746c4c3cfb3', '0xf877acafa28c19b96727966690b2f44d35ad5976', '0xb682c840b5f4fc58b20769e691a6fa1305a501a2', '0xfc41b49d064ac646015b459c522820db9472f4b5', '0xdc7810b47eaab250de623f0ee07764afa5f71ed1', '0xb6419c6c2e60c4025d6d06ee4f913ce89425a357', '0x9a858ebff1beb0d3495bb0e2897c1528ed84a218', '0x10ff57877b79e9bd949b3815220ec87b9fc5d2ee', '0xde8df9d942d78ede3ca06e60712582f79cfffc64', '0x6308204872bdb7432df97b04b42443c714904f3e', '0xb4fb8fed5b3aaa8434f0b19b1b623d977e07e86d', '0x2f90bb22eb3979f5ffad31ea6c3f0792ca66da32', '0xd64bcb70c613a6d1f4d7d57ba64bb4a0767a9682') AND SPLIT_INDEX(topics, ',', 0) IN ('0x4c209b5fc8ad50758f13e2e1088ba56a560dff690a1c6fef26394f4c03821c4f', '0xe5b754fb1abb7f01b499791d0b820ae3b6af3424ac1c59768edb53f4ec31a929', '0x13ed6866d4e1ee6da46f845c46d7e54120883d75c5ea9a2dacc1c4ca8984ab80', '0x1a2a22cb034d26d1854bdc6666a5b91fe25efbbb5dcad3b0355478d6f5c362a1', '0x298637f684da70674f26509b10f07ec2fbc77a335ab1e7d6215a4b2484d8bb52')
+  t_lending_events:
+    primary_key: id
+    sql: |
+      SELECT id, protocol, event_name, user_address, tx_hash, log_index, block_number, block_time, topics, data FROM t_aave
+      UNION ALL
+      SELECT id, protocol, event_name, user_address, tx_hash, log_index, block_number, block_time, topics, data FROM t_morpho
+      UNION ALL
+      SELECT id, protocol, event_name, user_address, tx_hash, log_index, block_number, block_time, topics, data FROM t_comet_usdc
+      UNION ALL
+      SELECT id, protocol, event_name, user_address, tx_hash, log_index, block_number, block_time, topics, data FROM t_comet_weth
+      UNION ALL
+      SELECT id, protocol, event_name, user_address, tx_hash, log_index, block_number, block_time, topics, data FROM t_moonwell
+sinks:
+  supabase_lending_events:
+    type: postgres
+    from: t_lending_events
+    schema: onchain
+    table: lending_events
+    secret_name: PANIK_SUPABASE
