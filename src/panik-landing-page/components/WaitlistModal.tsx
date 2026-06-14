@@ -3,144 +3,108 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from "react";
-import { 
-  X, Mail, ArrowRight, ChevronDown, CheckCircle2, ChevronRight, 
-  Sparkles, ShieldAlert, Search, Check, Info, HeartHandshake, Twitter
+import React, { useState, useEffect } from "react";
+import {
+  X, Mail, ArrowRight, CheckCircle2, ChevronRight, ChevronLeft,
+  ShieldAlert, Check, Info, HeartHandshake, Twitter, Wallet, Loader2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { WaitlistEntry } from "../types";
+import {
+  submitSignup, deriveAppetite, isValidEvmAddress, connectWallet,
+  waitlistConfigured, type SignupAnswers, type Appetite, type WalletRdns,
+} from "../lib/waitlist";
 
-// Logos for wallets in SVG format
+// ── Wallet logos (from the original design) ──────────────────────────────────
 const MetaMaskLogo = () => (
   <svg className="w-6 h-6 mr-3" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M29.5 13.5L25.3 4.2C25.1 3.8 24.6 3.6 24.2 3.8L16.2 7.8L8.2 3.8C7.8 3.6 7.3 3.8 7.1 4.2L2.9 13.5C2.7 13.9 2.8 14.4 3.1 14.7L15.3 26.9C15.7 27.3 16.3 27.3 16.7 26.9L28.9 14.7C29.2 14.4 29.3 13.9 29.5 13.5Z" fill="#F6851B"/>
-    <path d="M16 19.5L10.5 16.5L8.5 17.5L16 23.5L23.5 17.5L21.5 16.5L16 19.5Z" fill="#E2761B"/>
-    <path d="M24.5 11.5L20.5 9.5L16 11.5L11.5 9.5L7.5 11.5L5.5 16L7.5 16.5L11.5 14L16 15.5L20.5 14L24.5 16.5L26.5 16L24.5 11.5Z" fill="#D7C1B1"/>
+    <path d="M29.5 13.5L25.3 4.2C25.1 3.8 24.6 3.6 24.2 3.8L16.2 7.8L8.2 3.8C7.8 3.6 7.3 3.8 7.1 4.2L2.9 13.5C2.7 13.9 2.8 14.4 3.1 14.7L15.3 26.9C15.7 27.3 16.3 27.3 16.7 26.9L28.9 14.7C29.2 14.4 29.3 13.9 29.5 13.5Z" fill="#F6851B" />
+    <path d="M16 19.5L10.5 16.5L8.5 17.5L16 23.5L23.5 17.5L21.5 16.5L16 19.5Z" fill="#E2761B" />
   </svg>
 );
-
 const CoinbaseLogo = () => (
   <svg className="w-6 h-6 mr-3" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="16" cy="16" r="14" fill="#0052FF"/>
-    <path d="M9 16C9 12.134 12.134 9 16 9C19.866 9 23 12.134 23 16C23 19.866 19.866 23 16 23C12.134 23 9 19.866 9 16Z" fill="white"/>
+    <circle cx="16" cy="16" r="14" fill="#0052FF" />
+    <path d="M9 16C9 12.134 12.134 9 16 9C19.866 9 23 12.134 23 16C23 19.866 19.866 23 16 23C12.134 23 9 19.866 9 16Z" fill="white" />
   </svg>
 );
 
-const RabbyLogo = () => (
-  <svg className="w-6 h-6 mr-3" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <rect width="32" height="32" rx="6" fill="#1C1D24"/>
-    <circle cx="16" cy="16" r="10" fill="#2563EB"/>
-    <path d="M11 16H21" stroke="white" strokeWidth="3" strokeLinecap="round"/>
-    <path d="M16 11V21" stroke="white" strokeWidth="3" strokeLinecap="round"/>
-  </svg>
+// ── 5 qualification questions (keys MUST match the DB CHECK lists) ────────────
+type Single = { id: "q1" | "q2" | "q5"; kind: "single"; text: string; hint?: string; options: { key: string; label: string }[] };
+type Multi = { id: "q3" | "q4"; kind: "multi"; max?: number; text: string; hint: string; options: { key: string; label: string }[] };
+type Question = Single | Multi;
+
+const QUESTIONS: Question[] = [
+  {
+    id: "q1", kind: "single",
+    text: "How actively do you use DeFi lending or borrowing right now?",
+    options: [
+      { key: "never", label: "I have never borrowed or lent on a DeFi protocol" },
+      { key: "tried", label: "I have tried it but do not use it regularly" },
+      { key: "active_1_2", label: "I actively manage 1–2 positions, check at least weekly" },
+      { key: "active_3_plus", label: "I actively manage 3+ positions across protocols, weekly" },
+    ],
+  },
+  {
+    id: "q2", kind: "single",
+    text: "Have you ever been liquidated or come close to liquidation?",
+    options: [
+      { key: "no_unsure", label: "No, and I am not sure what triggers it" },
+      { key: "no_managed", label: "No, but I actively manage my health factor to avoid it" },
+      { key: "yes_caught", label: "Yes, it caught me off guard at least once" },
+      { key: "yes_accept", label: "Yes, I accept liquidation as part of how I trade" },
+    ],
+  },
+  {
+    id: "q3", kind: "multi",
+    text: "How do you currently track the risk of your open positions?",
+    hint: "Select all that apply",
+    options: [
+      { key: "manual_dashboard", label: "I check the protocol dashboard manually when I remember" },
+      { key: "portfolio_tracker", label: "I use a portfolio tracker (DeBank, Zerion, DeFi Saver)" },
+      { key: "custom_alerts", label: "I set up my own alerts (scripts, third-party apps)" },
+      { key: "protocol_alerts", label: "I rely on liquidation price alerts from the protocol itself" },
+    ],
+  },
+  {
+    id: "q4", kind: "multi", max: 2,
+    text: "Your biggest frustration managing DeFi positions today?",
+    hint: "Pick up to two",
+    options: [
+      { key: "no_unified_view", label: "No unified view — I check multiple dashboards for full exposure" },
+      { key: "slow_reaction", label: "Slow reaction — by the time I knew, it was too late to act well" },
+      { key: "silent_risk", label: "Silent risk — I had no alerts set up and missed a critical change" },
+      { key: "execution_friction", label: "Execution friction — acting across protocols takes too long" },
+    ],
+  },
+  {
+    id: "q5", kind: "single",
+    text: "How much do you currently have in active DeFi positions?",
+    hint: "Collateral + borrowed, current market value",
+    options: [
+      { key: "lt_1k", label: "Less than $1,000" },
+      { key: "1k_10k", label: "$1,000 – $10,000" },
+      { key: "10k_50k", label: "$10,000 – $50,000" },
+      { key: "50k_200k", label: "$50,000 – $200,000" },
+      { key: "gt_200k", label: "More than $200,000" },
+    ],
+  },
+];
+
+const APPETITE_LABEL: Record<Appetite, string> = { conservative: "Conservative", moderate: "Moderate", aggressive: "Aggressive" };
+const APPETITE_BLURB: Record<Appetite, string> = {
+  conservative: "You prize safety — Panik will surface risk early and favor low-leverage vaults.",
+  moderate: "Balanced — Panik will flag meaningful risk while leaving room to run.",
+  aggressive: "You run lean and chase yield — Panik will alert mainly near real danger.",
+};
+const Q_SUMMARY_LABEL: Record<string, Record<string, string>> = Object.fromEntries(
+  QUESTIONS.map((q) => [q.id, Object.fromEntries(q.options.map((o) => [o.key, o.label]))]),
 );
 
-const WalletConnectLogo = () => (
-  <svg className="w-6 h-6 mr-3" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M8.2 11.8C12.5 7.5 19.5 7.5 23.8 11.8L25.2 13.2C25.6 13.6 25.6 14.3 25.2 14.7L22.4 17.5C22 17.9 21.3 17.9 20.9 17.5L19.9 16.5C17.7 14.3 14.3 14.3 12.1 16.5L11.1 17.5C10.7 17.9 10 17.9 9.6 17.5L6.8 14.7C6.4 14.3 6.4 13.6 6.8 13.2L8.2 11.8Z" fill="#3B99FC"/>
-    <path d="M14.2 18.2C15.2 17.2 16.8 17.2 17.8 18.2L20.6 21C21 21.4 21 22.1 20.6 22.5L17.8 25.3C17.4 25.7 16.7 25.7 16.3 25.3L15.6 24.6C15.3 24.3 14.7 24.3 14.4 24.6L13.7 25.3C13.3 25.7 12.6 25.7 12.2 25.3L9.4 22.5C9 22.1 9 21.4 9.4 21L14.2 18.2Z" fill="#3B99FC"/>
-  </svg>
-);
-
-interface DropdownSelectProps {
-  options: string[];
-  selected: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-  isSearchable?: boolean;
+interface Answers {
+  q1: string | null; q2: string | null; q5: string | null;
+  q3: string[]; q4: string[];
 }
-
-// Gorgeous Custom Searchable Dropdown
-function DropdownSelect({ options, selected, onChange, placeholder = "Select an option", isSearchable = false }: DropdownSelectProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const filteredOptions = isSearchable
-    ? options.filter(opt => opt.toLowerCase().includes(search.toLowerCase()))
-    : options;
-
-  return (
-    <div ref={dropdownRef} className="relative w-full font-mono text-xs">
-      <button
-        type="button"
-        onClick={() => {
-          setIsOpen(!isOpen);
-          setSearch("");
-        }}
-        className="w-full h-12 px-4 flex items-center justify-between bg-[#111318] hover:bg-[#161922] border border-white/[0.08] hover:border-white/18 rounded-lg text-left text-[#F0F4FF] transition-all duration-300"
-      >
-        <span className={selected ? "text-white font-sans text-sm font-medium" : "text-white/30 font-sans text-sm font-medium"}>
-          {selected || placeholder}
-        </span>
-        <ChevronDown className={`w-4 h-4 text-white/40 transition-transform duration-300 ${isOpen ? "rotate-180" : ""}`} />
-      </button>
-
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: 5 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 5 }}
-            transition={{ duration: 0.15 }}
-            className="relative mt-2 bg-[#12141D] border border-white/[0.1] rounded-lg shadow-2xl z-50 overflow-hidden max-h-56 flex flex-col backdrop-blur-xl"
-          >
-            {isSearchable && (
-              <div className="p-2 border-b border-white/[0.05] flex items-center gap-2 bg-[#0E1016]">
-                <Search className="w-3.5 h-3.5 text-white/35 shrink-0" />
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Type to filter..."
-                  className="w-full bg-transparent text-white placeholder-white/25 outline-none font-sans text-sm"
-                  onClick={(e) => e.stopPropagation()}
-                />
-              </div>
-            )}
-            <div className="overflow-y-auto flex-1 py-1 max-h-40 divide-y divide-white/[0.02]">
-              {filteredOptions.length > 0 ? (
-                filteredOptions.map((opt) => (
-                  <button
-                    key={opt}
-                    type="button"
-                    onClick={() => {
-                      onChange(opt);
-                      setIsOpen(false);
-                    }}
-                    className={`w-full text-left px-4 py-3 text-sm font-sans flex items-center justify-between transition-colors ${
-                      selected === opt 
-                        ? "bg-panik-orange/10 text-panik-orange font-semibold" 
-                        : "text-white/70 hover:bg-white/[0.03] hover:text-white"
-                    }`}
-                  >
-                    <span>{opt}</span>
-                    {selected === opt && <Check className="w-4 h-4" />}
-                  </button>
-                ))
-              ) : (
-                <div className="px-4 py-3 text-white/30 font-sans text-xs italic text-center">
-                  No matching options
-                </div>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
+const EMPTY: Answers = { q1: null, q2: null, q5: null, q3: [], q4: [] };
 
 interface WaitlistModalProps {
   isOpen: boolean;
@@ -150,597 +114,418 @@ interface WaitlistModalProps {
 }
 
 export function WaitlistModal({ isOpen, onClose, onJoinSuccess, initialEmail = "" }: WaitlistModalProps) {
-  // Main state loops
   const [step, setStep] = useState(1);
-  const [email, setEmail] = useState("");
-  const [emailError, setEmailError] = useState("");
   const [qIndex, setQIndex] = useState(0);
 
-  // Unified Profiler answers state
-  const [answers, setAnswers] = useState({
-    acquisitionSource: "",
-    additionalNotes: ""
-  });
+  const [email, setEmail] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [answers, setAnswers] = useState<Answers>(EMPTY);
+  const [notes, setNotes] = useState("");
+  const [honeypot, setHoneypot] = useState("");
 
-  // State to simulate wallet loading state
-  const [connectingWallet, setConnectingWallet] = useState<string | null>(null);
-  const [connectedWallet, setConnectedWallet] = useState<string | null>(null);
+  // wallet
+  const [wallet, setWallet] = useState("");
+  const [walletError, setWalletError] = useState("");
+  const [connectingWallet, setConnectingWallet] = useState<WalletRdns | null>(null);
   const [showManualInput, setShowManualInput] = useState(false);
-  const [manualAddress, setManualAddress] = useState("");
-  const [manualAddressError, setManualAddressError] = useState("");
 
-  // Clear states when closing or opening
+  // submit
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+  const [position, setPosition] = useState<number | null>(null);
+
   useEffect(() => {
     if (isOpen) {
-      setStep(1);
-      setEmail(initialEmail);
-      setEmailError("");
-      setQIndex(0);
-      setAnswers({
-        acquisitionSource: "",
-        additionalNotes: ""
-      });
-      setConnectingWallet(null);
-      setConnectedWallet(null);
-      setShowManualInput(false);
-      setManualAddress("");
-      setManualAddressError("");
+      setStep(1); setQIndex(0);
+      setEmail(initialEmail); setEmailError("");
+      setAnswers(EMPTY); setNotes(""); setHoneypot("");
+      setWallet(""); setWalletError(""); setConnectingWallet(null); setShowManualInput(false);
+      setSubmitting(false); setSubmitError(""); setPosition(null);
     }
   }, [isOpen, initialEmail]);
 
   if (!isOpen) return null;
 
-  // Handle Step 1 Email Continue
+  const appetite: Appetite | null =
+    answers.q1 && answers.q2 && answers.q5
+      ? deriveAppetite(answers.q1 as SignupAnswers["q1DefiActivity"], answers.q2 as SignupAnswers["q2Liquidation"], answers.q5 as SignupAnswers["q5PortfolioSize"])
+      : null;
+
   const handleEmailNext = (e: React.FormEvent) => {
     e.preventDefault();
-    const formattedEmail = email.trim();
-    if (!formattedEmail) return;
-
-    // Email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formattedEmail)) {
-      setEmailError("Please enter a valid corporate or Web3 email address");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setEmailError("Please enter a valid email address");
       return;
     }
-
     setEmailError("");
-    setStep(2); // Go to questions
+    setStep(2); setQIndex(0);
   };
 
-  // Questions Setup
-  const questionsList = [
-    {
-      id: "acquisitionSource",
-      text: "Where did you hear about Panik?",
-      options: [
-        "Protocol Camp",
-        "Twitter / X",
-        "Friend or Referral",
-        "Discord",
-        "Telegram",
-        "YouTube",
-        "Google Search",
-        "Crypto Newsletter",
-        "Conference / Event",
-        "Other"
-      ],
-      isSearchable: true // The required final question is searchable for smooth onboarding CX
-    }
-  ];
+  const q = QUESTIONS[qIndex];
+  const selectSingle = (id: "q1" | "q2" | "q5", key: string) => setAnswers((a) => ({ ...a, [id]: key }));
+  const toggleMulti = (id: "q3" | "q4", key: string, max?: number) =>
+    setAnswers((a) => {
+      const cur = a[id];
+      if (cur.includes(key)) return { ...a, [id]: cur.filter((k) => k !== key) };
+      if (max && cur.length >= max) return a;
+      return { ...a, [id]: [...cur, key] };
+    });
 
-  const currentQ = questionsList[0];
+  const currentAnswered = q.kind === "single" ? Boolean(answers[q.id]) : true; // multi is optional
 
-  const handleSelectAnswer = (valve: string) => {
-    setAnswers(prev => ({ ...prev, acquisitionSource: valve }));
+  const handleQuestionNext = () => {
+    if (!currentAnswered) return;
+    if (qIndex < QUESTIONS.length - 1) setQIndex(qIndex + 1);
+    else setStep(3);
+  };
+  const handleQuestionBack = () => {
+    if (qIndex > 0) setQIndex(qIndex - 1);
+    else setStep(1);
   };
 
-  const handleNextQuestion = () => {
-    if (answers.acquisitionSource) {
-      setStep(3);
-    }
-  };
-
-  // Handle Review confirmation transition
-  const handleConfirmOnboarding = () => {
-    // Notify parent to add subscriber!
-    // Set waitlist source based on selected activity to show nicely in historical listings
-    const subscriberSource = answers.acquisitionSource || "Default Referrer";
-    onJoinSuccess(email, subscriberSource);
-
-    // Proceed to Wallet Connection
-    setStep(4);
-  };
-
-  // Simulate wallet pairing
-  const handleWalletClick = (walletName: string) => {
-    setConnectingWallet(walletName);
-    setTimeout(() => {
+  const handleConnect = async (rdns: WalletRdns) => {
+    setWalletError(""); setConnectingWallet(rdns);
+    try {
+      setWallet(await connectWallet(rdns));
+    } catch (err) {
+      setWalletError(err instanceof Error ? err.message : "Wallet connection failed");
+    } finally {
       setConnectingWallet(null);
-      setConnectedWallet(walletName);
-      // Automatically advance to success screen after elegant fake connection
-      setStep(5);
-    }, 1200);
+    }
   };
 
-  // Handle manual address submission
-  const handleManualAddressSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const address = manualAddress.trim();
-    if (!address) {
-      setManualAddressError("Please enter a valid wallet address");
+  const quizComplete = Boolean(answers.q1 && answers.q2 && answers.q5);
+
+  const handleSubmit = async () => {
+    if (!isValidEvmAddress(wallet)) { setWalletError("Enter a valid EVM address (0x + 40 hex)"); return; }
+    if (!quizComplete || submitting) return;
+    setSubmitting(true); setSubmitError("");
+    const result = await submitSignup({
+      email: email.trim(),
+      walletAddress: wallet.trim(),
+      q1DefiActivity: answers.q1 as SignupAnswers["q1DefiActivity"],
+      q2Liquidation: answers.q2 as SignupAnswers["q2Liquidation"],
+      q3RiskTracking: answers.q3 as SignupAnswers["q3RiskTracking"],
+      q4Frustrations: answers.q4 as SignupAnswers["q4Frustrations"],
+      q5PortfolioSize: answers.q5 as SignupAnswers["q5PortfolioSize"],
+      additionalNotes: notes.trim() || undefined,
+      honeypot,
+    });
+    setSubmitting(false);
+    if (!result.ok) {
+      setSubmitError(result.error === "config_missing"
+        ? "Signup is not configured yet. Please try again later."
+        : "Something went wrong. Please check your connection and retry.");
       return;
     }
-
-    const isEVM = /^0x[a-fA-F0-9]{40}$/.test(address);
-    const isENS = /.+\.eth$/i.test(address);
-    const isGenericAddress = /^[a-zA-Z0-9]{25,65}$/.test(address);
-
-    if (!isEVM && !isENS && !isGenericAddress) {
-      setManualAddressError("Please enter a valid EVM address (0x...), Solana address, or ENS name");
-      return;
-    }
-
-    setManualAddressError("");
-    setConnectingWallet("Manual Input");
-    setTimeout(() => {
-      setConnectingWallet(null);
-      const shortenedAddress = address.length > 12 
-        ? `${address.slice(0, 6)}...${address.slice(-4)}` 
-        : address;
-      setConnectedWallet(shortenedAddress);
-      setStep(5);
-    }, 1200);
+    setPosition(result.position ?? null);
+    onJoinSuccess(email.trim(), appetite ? `${APPETITE_LABEL[appetite]} profile` : "Waitlist");
+    setStep(5);
   };
 
-  const currentStepPercentage = Math.round(((step - 1) / 4) * 100);
+  const pct = Math.round(((step - 1) / 4) * 100);
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 overflow-y-auto">
-      {/* Background dark glass overlay blur */}
-      <motion.div 
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        onClick={onClose}
-        className="absolute inset-0 bg-black/75 backdrop-blur-md"
-      />
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="absolute inset-0 bg-black/75 backdrop-blur-md" />
 
-      {/* Main Glass Panel */}
       <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 15 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 15 }}
+        initial={{ opacity: 0, scale: 0.95, y: 15 }} animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ type: "spring", duration: 0.5 }}
-        className="w-full max-w-[650px] bg-[#0E1016]/95 border border-white/[0.08] hover:border-orange-500/15 p-6 sm:p-10 rounded-2xl relative shadow-2xl backdrop-blur-2xl z-10"
+        className="w-full max-w-[650px] bg-[#0E1016]/95 border border-white/[0.08] hover:border-orange-500/15 p-6 sm:p-10 rounded-2xl relative shadow-2xl backdrop-blur-2xl z-10 my-8"
       >
-        {/* Glow ambient circle accent */}
         <div className="absolute top-0 right-0 w-44 h-44 bg-panik-orange/5 rounded-full blur-[60px] pointer-events-none" />
         <div className="absolute -bottom-20 -left-20 w-56 h-56 bg-panik-orange/3 rounded-full blur-[80px] pointer-events-none" />
 
-        {/* Global Modal Header Bar */}
+        {/* Header */}
         <div className="flex justify-between items-center mb-6 relative z-10">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-panik-orange animate-pulse" />
-            <span className="text-[10px] font-mono tracking-widest text-[#94A3B8] uppercase">
-              RESERVE ONBOARDING INDEX
-            </span>
+            <span className="text-[10px] font-mono tracking-widest text-[#94A3B8] uppercase">RESERVE ONBOARDING INDEX</span>
           </div>
-          <button 
-            onClick={onClose}
-            className="p-1.5 rounded-md hover:bg-white/5 text-white/50 hover:text-white transition-all duration-200"
-            aria-label="Close modal"
-          >
+          <button onClick={onClose} className="p-1.5 rounded-md hover:bg-white/5 text-white/50 hover:text-white transition-all duration-200" aria-label="Close modal">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Progress Progress HUD bar info */}
+        {/* Progress */}
         {step < 5 && (
           <div className="mb-8 w-full">
             <div className="flex justify-between items-center text-[10px] font-mono text-white/40 mb-1.5 tracking-wider uppercase">
               <span>Waitlist Pipeline</span>
-              <span>Step {step} of 4 ({currentStepPercentage}%)</span>
+              <span>Step {step} of 4 ({pct}%)</span>
             </div>
-            {/* Progress line track */}
             <div className="h-[2px] w-full bg-white/[0.05] rounded-full overflow-hidden">
-              <motion.div 
-                className="h-full bg-panik-orange" 
-                initial={{ width: 0 }}
-                animate={{ width: `${currentStepPercentage}%` }}
-                transition={{ duration: 0.3 }}
-              />
+              <motion.div className="h-full bg-panik-orange" initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.3 }} />
             </div>
           </div>
         )}
 
+        {/* Honeypot — off-screen, not in tab order. Non-semantic name + autoComplete
+            off so password managers don't autofill it and drop a real signup. */}
+        <input type="text" name="panik_hp_field" tabIndex={-1} autoComplete="off" aria-hidden="true" value={honeypot} onChange={(e) => setHoneypot(e.target.value)} className="absolute opacity-0 pointer-events-none -left-[9999px] h-0 w-0" />
+
         <AnimatePresence mode="wait">
-          {/* STEP 1: EMAIL COLLECTION */}
+          {/* STEP 1 — EMAIL */}
           {step === 1 && (
-            <motion.div
-              key="step1"
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 10 }}
-              transition={{ duration: 0.2 }}
-              className="space-y-6"
-            >
+            <motion.div key="s1" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} transition={{ duration: 0.2 }} className="space-y-6">
               <div>
-                <h2 className="font-display font-medium text-2xl sm:text-3xl text-white tracking-tight leading-snug">
-                  Join the Panik Early Access Program
-                </h2>
+                <h2 className="font-display font-medium text-2xl sm:text-3xl text-white tracking-tight leading-snug">Join the Panik Early Access Program</h2>
                 <p className="text-panik-text-secondary text-sm font-sans mt-2.5 leading-relaxed">
                   Help us build the future of DeFi risk intelligence. Answer a few quick profiling questions to secure early access and reserve your queue slot.
                 </p>
               </div>
-
               <form onSubmit={handleEmailNext} className="space-y-4">
                 <div>
-                  <label htmlFor="modal-email-input" className="block text-[11px] font-mono tracking-wider text-white/50 uppercase mb-2">
-                    Enter email address
-                  </label>
+                  <label htmlFor="modal-email-input" className="block text-[11px] font-mono tracking-wider text-white/50 uppercase mb-2">Enter email address</label>
                   <div className="relative flex items-center">
                     <Mail className="absolute left-4 w-4.5 h-4.5 text-white/30" />
                     <input
-                      type="email"
-                      id="modal-email-input"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      type="email" id="modal-email-input" value={email} onChange={(e) => setEmail(e.target.value)}
                       placeholder="you@company.com or web3 mail..."
                       className="w-full h-12 pl-12 pr-4 bg-[#111318] border border-white/[0.08] hover:border-white/18 focus:border-panik-orange/50 focus:ring-1 focus:ring-panik-orange/20 text-[#F0F4FF] placeholder-white/25 text-sm font-sans rounded-lg outline-none transition-all duration-300"
                       required
                     />
                   </div>
                   {emailError && (
-                    <p className="text-red-400 text-xs font-mono mt-2.5 flex items-center gap-1.5 animate-fadeIn">
-                      <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
-                      <span>{emailError}</span>
+                    <p className="text-red-400 text-xs font-mono mt-2.5 flex items-center gap-1.5">
+                      <ShieldAlert className="w-3.5 h-3.5 shrink-0" /><span>{emailError}</span>
                     </p>
                   )}
                 </div>
-
-                <button
-                  type="submit"
-                  disabled={!email}
-                  className="w-full h-12 bg-panik-orange hover:bg-panik-orange/90 disabled:opacity-50 disabled:hover:bg-panik-orange text-white font-mono text-xs uppercase tracking-wider font-semibold rounded-lg flex items-center justify-center gap-2 cursor-pointer transition-all duration-300 shadow-lg shadow-orange-500/5 active:scale-[0.99]"
-                >
-                  <span>Continue</span>
-                  <ArrowRight className="w-4 h-4" />
+                <button type="submit" disabled={!email} className="w-full h-12 bg-panik-orange hover:bg-panik-orange/90 disabled:opacity-50 disabled:hover:bg-panik-orange text-white font-mono text-xs uppercase tracking-wider font-semibold rounded-lg flex items-center justify-center gap-2 cursor-pointer transition-all duration-300 shadow-lg shadow-orange-500/5 active:scale-[0.99]">
+                  <span>Continue</span><ArrowRight className="w-4 h-4" />
                 </button>
               </form>
             </motion.div>
           )}
 
-          {/* STEP 2: USER PROFILING QUESTIONS */}
+          {/* STEP 2 — PAGINATED MULTIPLE-CHOICE QUIZ */}
           {step === 2 && (
-            <motion.div
-              key="step2"
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -15 }}
-              transition={{ duration: 0.3 }}
-              className="space-y-6 min-h-[350px] pb-4"
-            >
+            <motion.div key={`s2-${qIndex}`} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -15 }} transition={{ duration: 0.25 }} className="space-y-6 min-h-[360px] flex flex-col">
               <div className="flex justify-between items-center border-b border-white/[0.03] pb-3">
-                <span className="text-[10px] font-mono tracking-widest text-[#F97316] uppercase font-bold">
-                  User Profiling Evaluation
-                </span>
-                <span className="text-[10px] font-mono text-white/35">
-                  Step 2 of 4
-                </span>
+                <span className="text-[10px] font-mono tracking-widest text-[#F97316] uppercase font-bold">User Profiling Evaluation</span>
+                <span className="text-[10px] font-mono text-white/35">Question {qIndex + 1} of {QUESTIONS.length}</span>
               </div>
 
-              <div className="space-y-5">
-                <div>
-                  <h3 className="font-display font-medium text-base sm:text-lg text-white tracking-tight leading-snug mb-2.5">
-                    Where did you hear about Panik?
-                  </h3>
-                  <DropdownSelect
-                    options={questionsList[0].options}
-                    selected={answers.acquisitionSource}
-                    onChange={handleSelectAnswer}
-                    placeholder="Choose answer..."
-                    isSearchable={true}
-                  />
-                </div>
-
-                <div className="pt-2">
-                  <h3 className="font-display font-medium text-sm text-white/80 tracking-tight leading-snug mb-2.5">
-                    Anything else you want us to know about how you manage your DeFi positions? <span className="text-white/40">(Optional)</span>
-                  </h3>
-                  <textarea
-                    rows={4}
-                    value={answers.additionalNotes}
-                    onChange={(e) => setAnswers(prev => ({ ...prev, additionalNotes: e.target.value }))}
-                    placeholder="E.g., protocols you use, alerting strategies, or features you are looking for..."
-                    className="w-full p-3.5 bg-[#111318] border border-white/[0.08] hover:border-white/18 focus:border-panik-orange/50 focus:ring-1 focus:ring-panik-orange/20 text-[#F0F4FF] placeholder-white/25 text-sm font-sans rounded-lg outline-none transition-all duration-300 resize-none"
-                  />
-                </div>
+              {/* in-quiz progress dots */}
+              <div className="flex items-center gap-1.5">
+                {QUESTIONS.map((_, i) => (
+                  <div key={i} className={`h-1 flex-1 rounded-full transition-colors ${i < qIndex ? "bg-panik-orange" : i === qIndex ? "bg-panik-orange/60" : "bg-white/[0.06]"}`} />
+                ))}
               </div>
 
-              <div className="flex items-center justify-between pt-4 mt-6 border-t border-white/[0.03]">
-                <button
-                  type="button"
-                  onClick={() => setStep(1)}
-                  className="text-xs font-mono text-white/45 hover:text-white transition-colors uppercase h-10 px-4 rounded hover:bg-white/[0.02]"
-                >
-                  Back
-                </button>
+              <div className="flex-1">
+                <h3 className="font-display font-medium text-lg sm:text-xl text-white tracking-tight leading-snug mb-1">{q.text}</h3>
+                {q.hint && <p className="text-[11px] font-mono text-white/40 uppercase tracking-wider mb-4">{q.hint}</p>}
+                {!q.hint && <div className="mb-4" />}
 
-                <button
-                  type="button"
-                  onClick={handleNextQuestion}
-                  disabled={!answers.acquisitionSource}
-                  className="h-10 px-6 bg-white/[0.04] hover:bg-white/[0.08] disabled:opacity-40 text-white font-mono text-xs uppercase tracking-wider rounded border border-white/[0.08] hover:border-white/[0.15] flex items-center gap-1.5 transition-all duration-300 disabled:pointer-events-none"
-                >
-                  <span>Finish Summary</span>
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-            </motion.div>
-          )}
-
-          {/* STEP 3: REVIEW & CONFIRMATION */}
-          {step === 3 && (
-            <motion.div
-              key="step3"
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 10 }}
-              transition={{ duration: 0.2 }}
-              className="space-y-6"
-            >
-              <div>
-                <h2 className="font-display font-medium text-2xl text-white tracking-tight">Onboarding Profile Summary</h2>
-                <p className="text-panik-text-secondary text-sm mt-1">Review your credential indexes before submission security commits.</p>
-              </div>
-
-              {/* Receipt-style Onboarding Summary Card */}
-              <div className="bg-[#111318]/80 border border-white/[0.06] rounded-xl overflow-hidden divide-y divide-white/[0.04]">
-                <div className="p-4 flex justify-between items-center text-xs">
-                  <span className="font-mono text-white/40 uppercase">Email</span>
-                  <span className="font-mono text-white font-semibold truncate max-w-[220px] sm:max-w-xs">{email}</span>
+                <div className="space-y-2.5">
+                  {q.options.map((o) => {
+                    const selected = q.kind === "single" ? answers[q.id] === o.key : answers[q.id].includes(o.key);
+                    const capped = q.kind === "multi" && !selected && answers[q.id].length >= (q.max ?? 99);
+                    return (
+                      <button
+                        key={o.key} type="button" disabled={capped}
+                        onClick={() => (q.kind === "single" ? selectSingle(q.id, o.key) : toggleMulti(q.id, o.key, q.max))}
+                        className={`w-full text-left px-4 py-3.5 rounded-lg border flex items-center gap-3 transition-all duration-200 ${
+                          selected ? "bg-panik-orange/[0.07] border-panik-orange/40 text-white" : "bg-[#111318] border-white/[0.06] hover:border-white/[0.16] text-white/75"
+                        } ${capped ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
+                      >
+                        <span className={`shrink-0 w-5 h-5 flex items-center justify-center border transition-colors ${q.kind === "multi" ? "rounded" : "rounded-full"} ${selected ? "bg-panik-orange border-panik-orange" : "border-white/25"}`}>
+                          {selected && <Check className="w-3 h-3 text-white stroke-[3]" />}
+                        </span>
+                        <span className="text-sm font-sans leading-snug">{o.label}</span>
+                      </button>
+                    );
+                  })}
                 </div>
-                <div className="p-4 flex justify-between items-center text-xs">
-                  <span className="font-mono text-white/40 uppercase">Referral Source</span>
-                  <span className="font-sans text-[#F0F4FF] font-medium">{answers.acquisitionSource}</span>
-                </div>
-                {answers.additionalNotes.trim() && (
-                  <div className="p-4 flex flex-col gap-1 text-xs">
-                    <span className="font-mono text-white/40 uppercase mb-1">Additional Notes</span>
-                    <span className="font-sans text-[#F0F4FF] font-medium text-left leading-relaxed break-words block max-h-24 overflow-y-auto pr-1">{answers.additionalNotes}</span>
+
+                {/* optional notes appear on the last question */}
+                {qIndex === QUESTIONS.length - 1 && (
+                  <div className="mt-5 space-y-2">
+                    <label className="font-display font-medium text-sm text-white/80 leading-snug block">
+                      Anything else about how you manage DeFi positions? <span className="text-white/40">(Optional)</span>
+                    </label>
+                    <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Protocols you use, alerting strategies, features you want…"
+                      className="w-full p-3.5 bg-[#111318] border border-white/[0.08] hover:border-white/18 focus:border-panik-orange/50 focus:ring-1 focus:ring-panik-orange/20 text-[#F0F4FF] placeholder-white/25 text-sm font-sans rounded-lg outline-none transition-all resize-none" />
                   </div>
                 )}
               </div>
 
-              {/* Match Statement Banner */}
-              <div className="p-4 rounded-xl bg-orange-500/[0.03] border border-panik-orange/15 flex items-start gap-3">
-                <HeartHandshake className="w-5 h-5 text-panik-orange shrink-0 mt-0.5" />
-                <p className="text-xs text-panik-text-secondary leading-relaxed">
-                  Thanks. You're exactly the type of user we're building Panik for. Your profile signals robust alignment with our DeFi telemetry frameworks.
-                </p>
+              <div className="flex items-center justify-between pt-4 border-t border-white/[0.03]">
+                <button type="button" onClick={handleQuestionBack} className="text-xs font-mono text-white/45 hover:text-white transition-colors uppercase h-10 px-4 rounded hover:bg-white/[0.02] flex items-center gap-1">
+                  <ChevronLeft className="w-4 h-4" /><span>Back</span>
+                </button>
+                <button type="button" onClick={handleQuestionNext} disabled={!currentAnswered}
+                  className="h-10 px-6 bg-panik-orange hover:bg-panik-orange/90 disabled:opacity-40 text-white font-mono text-xs uppercase tracking-wider font-semibold rounded-lg flex items-center gap-1.5 transition-all duration-300 disabled:pointer-events-none">
+                  <span>{qIndex === QUESTIONS.length - 1 ? "Review" : "Next"}</span><ChevronRight className="w-4 h-4" />
+                </button>
               </div>
-
-              <button
-                type="button"
-                onClick={handleConfirmOnboarding}
-                className="w-full h-12 bg-panik-orange hover:bg-panik-orange/90 text-white font-mono text-xs uppercase tracking-wider font-bold rounded-lg flex items-center justify-center gap-2 cursor-pointer transition-all duration-300 active:scale-[0.99] shadow-lg shadow-orange-500/5 mt-4"
-              >
-                <span>Continue to Early Access Setup</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
             </motion.div>
           )}
 
-          {/* STEP 4: WALLET CONNECTION */}
-          {step === 4 && (
-            <motion.div
-              key="step4"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.3 }}
-              className="space-y-6"
-            >
+          {/* STEP 3 — REVIEW */}
+          {step === 3 && (
+            <motion.div key="s3" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} transition={{ duration: 0.2 }} className="space-y-6">
               <div>
-                <h2 className="font-display font-medium text-2xl text-white tracking-tight leading-snug">
-                  Reserve Your Beta Access
-                </h2>
+                <h2 className="font-display font-medium text-2xl text-white tracking-tight">Onboarding Profile Summary</h2>
+                <p className="text-panik-text-secondary text-sm mt-1">Review your answers before reserving your slot.</p>
+              </div>
+
+              <div className="bg-[#111318]/80 border border-white/[0.06] rounded-xl overflow-hidden divide-y divide-white/[0.04] max-h-64 overflow-y-auto">
+                <div className="p-4 flex justify-between items-center text-xs">
+                  <span className="font-mono text-white/40 uppercase">Email</span>
+                  <span className="font-mono text-white font-semibold truncate max-w-[220px] sm:max-w-xs">{email}</span>
+                </div>
+                {(["q1", "q2", "q5"] as const).map((id) => (
+                  <div key={id} className="p-4 flex flex-col gap-1 text-xs">
+                    <span className="font-mono text-white/40 uppercase">{QUESTIONS.find((x) => x.id === id)!.text}</span>
+                    <span className="font-sans text-[#F0F4FF] font-medium">{answers[id] ? Q_SUMMARY_LABEL[id][answers[id]!] : "—"}</span>
+                  </div>
+                ))}
+                {answers.q3.length > 0 && (
+                  <div className="p-4 flex flex-col gap-1 text-xs">
+                    <span className="font-mono text-white/40 uppercase">Risk tracking</span>
+                    <span className="font-sans text-[#F0F4FF] font-medium">{answers.q3.map((k) => Q_SUMMARY_LABEL.q3[k]).join("; ")}</span>
+                  </div>
+                )}
+                {answers.q4.length > 0 && (
+                  <div className="p-4 flex flex-col gap-1 text-xs">
+                    <span className="font-mono text-white/40 uppercase">Biggest frustration</span>
+                    <span className="font-sans text-[#F0F4FF] font-medium">{answers.q4.map((k) => Q_SUMMARY_LABEL.q4[k]).join("; ")}</span>
+                  </div>
+                )}
+              </div>
+
+              {appetite && (
+                <div className="p-4 rounded-xl bg-orange-500/[0.03] border border-panik-orange/15 flex items-start gap-3">
+                  <HeartHandshake className="w-5 h-5 text-panik-orange shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-mono uppercase tracking-widest text-panik-orange mb-0.5">Your Panik profile · {APPETITE_LABEL[appetite]}</p>
+                    <p className="text-xs text-panik-text-secondary leading-relaxed">{APPETITE_BLURB[appetite]}</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between pt-1">
+                <button type="button" onClick={() => { setStep(2); setQIndex(QUESTIONS.length - 1); }} className="text-xs font-mono text-white/45 hover:text-white transition-colors uppercase h-10 px-4 rounded hover:bg-white/[0.02] flex items-center gap-1">
+                  <ChevronLeft className="w-4 h-4" /><span>Back</span>
+                </button>
+                <button type="button" onClick={() => setStep(4)} className="h-12 px-7 bg-panik-orange hover:bg-panik-orange/90 text-white font-mono text-xs uppercase tracking-wider font-bold rounded-lg flex items-center gap-2 cursor-pointer transition-all active:scale-[0.99] shadow-lg shadow-orange-500/5">
+                  <span>Continue to Wallet</span><ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* STEP 4 — WALLET (required) + SUBMIT */}
+          {step === 4 && (
+            <motion.div key="s4" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.3 }} className="space-y-6">
+              <div>
+                <h2 className="font-display font-medium text-2xl text-white tracking-tight leading-snug">Reserve Your Beta Access</h2>
                 <p className="text-panik-text-secondary text-sm font-sans mt-2 leading-relaxed">
-                  When Panik launches its beta, connected wallets will receive priority access and early testing opportunities.
+                  Required — your wallet lets us verify on-chain DeFi activity and tailor early access. No transaction, no signing.
                 </p>
               </div>
 
               {showManualInput ? (
-                <form onSubmit={handleManualAddressSubmit} className="space-y-4">
-                  <div>
-                    <label htmlFor="manual-wallet-input" className="block text-[11px] font-mono tracking-wider text-white/50 uppercase mb-2">
-                      Enter public wallet address (EVM address or ENS)
-                    </label>
-                    <div className="relative flex items-center">
-                      <input
-                        type="text"
-                        id="manual-wallet-input"
-                        value={manualAddress}
-                        onChange={(e) => {
-                          setManualAddress(e.target.value);
-                          if (manualAddressError) setManualAddressError("");
-                        }}
-                        placeholder="0x... or vitalik.eth"
-                        className="w-full h-12 px-4 bg-[#111318] border border-white/[0.08] hover:border-white/18 focus:border-panik-orange/50 focus:ring-1 focus:ring-panik-orange/20 text-[#F0F4FF] placeholder-white/25 text-sm font-mono rounded-lg outline-none transition-all duration-300"
-                        required
-                        disabled={connectingWallet !== null}
-                      />
-                    </div>
-                    {manualAddressError && (
-                      <p className="text-red-400 text-xs font-mono mt-2.5 flex items-center gap-1.5 animate-fadeIn">
-                        <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
-                        <span>{manualAddressError}</span>
-                      </p>
-                    )}
+                <div className="space-y-3">
+                  <label htmlFor="manual-wallet-input" className="block text-[11px] font-mono tracking-wider text-white/50 uppercase">Enter a public EVM address</label>
+                  <div className="relative flex items-center">
+                    <Wallet className="absolute left-4 w-4.5 h-4.5 text-white/30" />
+                    <input type="text" id="manual-wallet-input" value={wallet} onChange={(e) => { setWallet(e.target.value.trim()); if (walletError) setWalletError(""); }} placeholder="0x…"
+                      className="w-full h-12 pl-12 pr-4 bg-[#111318] border border-white/[0.08] hover:border-white/18 focus:border-panik-orange/50 focus:ring-1 focus:ring-panik-orange/20 text-[#F0F4FF] placeholder-white/25 text-sm font-mono rounded-lg outline-none transition-all" />
                   </div>
-
-                  <button
-                    type="submit"
-                    disabled={!manualAddress || connectingWallet !== null}
-                    className="w-full h-12 bg-panik-orange hover:bg-panik-orange/90 disabled:opacity-50 disabled:hover:bg-panik-orange text-white font-mono text-xs uppercase tracking-wider font-semibold rounded-lg flex items-center justify-center gap-2 cursor-pointer transition-all duration-300 shadow-lg shadow-orange-500/5 active:scale-[0.99]"
-                  >
-                    <span>Confirm Manual Address</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
-                </form>
+                </div>
               ) : (
-                /* Simulated wallet selection grid */
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mt-4">
-                  <button
-                    type="button"
-                    disabled={connectingWallet !== null}
-                    onClick={() => handleWalletClick("MetaMask")}
-                    className={`p-4 flex items-center bg-[#111318] hover:bg-[#151821] border text-left rounded-xl transition-all duration-200 select-none ${
-                      connectingWallet === "MetaMask"
-                        ? "border-panik-orange bg-panik-orange/[0.02]"
-                        : "border-white/[0.06] hover:border-white/[0.15]"
-                    } disabled:opacity-60`}
-                  >
-                    <MetaMaskLogo />
-                    <div className="flex-1">
-                      <span className="block text-white text-sm font-sans font-semibold">MetaMask</span>
-                      <span className="text-[10px] font-mono text-white/40 uppercase">EVM Wallet</span>
-                    </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <button type="button" disabled={connectingWallet !== null} onClick={() => handleConnect("io.metamask")} className={`p-4 flex items-center bg-[#111318] hover:bg-[#151821] border text-left rounded-xl transition-all duration-200 select-none disabled:opacity-60 ${connectingWallet === "io.metamask" ? "border-panik-orange" : "border-white/[0.06] hover:border-white/[0.15]"}`}>
+                    {connectingWallet === "io.metamask" ? <Loader2 className="w-6 h-6 mr-3 text-panik-orange animate-spin" /> : <MetaMaskLogo />}
+                    <div className="flex-1"><span className="block text-white text-sm font-sans font-semibold">MetaMask</span><span className="text-[10px] font-mono text-white/40 uppercase">{connectingWallet === "io.metamask" ? "Connecting…" : "EVM Wallet"}</span></div>
                   </button>
-
-                  <button
-                    type="button"
-                    disabled={connectingWallet !== null}
-                    onClick={() => handleWalletClick("Coinbase Wallet")}
-                    className={`p-4 flex items-center bg-[#111318] hover:bg-[#151821] border text-left rounded-xl transition-all duration-200 select-none ${
-                      connectingWallet === "Coinbase Wallet"
-                        ? "border-panik-orange bg-panik-orange/[0.02]"
-                        : "border-white/[0.06] hover:border-white/[0.15]"
-                    } disabled:opacity-60`}
-                  >
-                    <CoinbaseLogo />
-                    <div className="flex-1">
-                      <span className="block text-white text-sm font-sans font-semibold">Coinbase Wallet</span>
-                      <span className="text-[10px] font-mono text-white/40 uppercase">Coinbase SDK</span>
-                    </div>
+                  <button type="button" disabled={connectingWallet !== null} onClick={() => handleConnect("com.coinbase.wallet")} className={`p-4 flex items-center bg-[#111318] hover:bg-[#151821] border text-left rounded-xl transition-all duration-200 select-none disabled:opacity-60 ${connectingWallet === "com.coinbase.wallet" ? "border-panik-orange" : "border-white/[0.06] hover:border-white/[0.15]"}`}>
+                    {connectingWallet === "com.coinbase.wallet" ? <Loader2 className="w-6 h-6 mr-3 text-panik-orange animate-spin" /> : <CoinbaseLogo />}
+                    <div className="flex-1"><span className="block text-white text-sm font-sans font-semibold">Coinbase Wallet</span><span className="text-[10px] font-mono text-white/40 uppercase">{connectingWallet === "com.coinbase.wallet" ? "Connecting…" : "Injected"}</span></div>
                   </button>
                 </div>
               )}
 
-              {/* Manually connect wallet toggle link */}
-              <div className="text-center pt-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowManualInput(!showManualInput);
-                    setManualAddressError("");
-                  }}
-                  disabled={connectingWallet !== null}
-                  className="text-xs font-mono text-panik-orange hover:text-panik-orange/80 tracking-wider pb-0.5 border-b border-transparent hover:border-panik-orange/30 transition-all duration-200 uppercase flex items-center justify-center gap-1.5 mx-auto cursor-pointer"
-                >
-                  <span>{showManualInput ? "Choose standard wallet connect" : "enter your wallet address"}</span>
+              <div className="text-center">
+                <button type="button" onClick={() => { setShowManualInput(!showManualInput); setWalletError(""); }} disabled={connectingWallet !== null} className="text-xs font-mono text-panik-orange hover:text-panik-orange/80 tracking-wider pb-0.5 border-b border-transparent hover:border-panik-orange/30 transition-all duration-200 uppercase cursor-pointer">
+                  {showManualInput ? "Use a browser wallet instead" : "…or paste a wallet address"}
                 </button>
               </div>
 
-              {/* Feedback loader indicators */}
-              {connectingWallet && (
-                <div className="py-2.5 flex items-center justify-center gap-3 bg-panik-orange/[0.04] border border-panik-orange/20 rounded-lg text-xs font-mono text-panik-orange animate-pulse">
-                  <div className="w-3.5 h-3.5 border-2 border-panik-orange border-t-transparent rounded-full animate-spin" />
-                  <span>
-                    {connectingWallet === "Manual Input"
-                      ? "Verifying manual wallet address..."
-                      : `Connecting Ledger Signatures with ${connectingWallet}...`}
-                  </span>
+              {wallet && isValidEvmAddress(wallet) && connectingWallet === null && (
+                <div className="py-2.5 px-4 flex items-center gap-2.5 bg-emerald-500/[0.05] border border-emerald-500/25 rounded-lg text-xs font-mono text-emerald-400">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" /><span>Connected: {wallet.slice(0, 6)}…{wallet.slice(-4)}</span>
+                </div>
+              )}
+              {walletError && (
+                <p className="text-red-400 text-xs font-mono flex items-center gap-1.5"><ShieldAlert className="w-3.5 h-3.5 shrink-0" /><span>{walletError}</span></p>
+              )}
+              {submitError && (
+                <div className="p-3.5 rounded-lg bg-red-500/[0.06] border border-red-500/25 flex items-start gap-2.5 text-xs text-red-300 font-mono leading-relaxed">
+                  <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" /><span>{submitError}</span>
                 </div>
               )}
 
-              {/* Informative advice banner */}
-              <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.04] flex gap-3 text-xs text-white/50 leading-relaxed font-sans">
+              <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.04] flex gap-3 text-xs text-white/50 leading-relaxed font-sans">
                 <Info className="w-5 h-5 text-white/30 shrink-0 mt-0.5" />
-                <p>
-                  Connecting a wallet does NOT grant access today. It simply reserves eligibility for future beta releases. Your funds remain under your control. No transactions are required.
-                </p>
+                <p>Connecting reserves eligibility for future beta releases. Your funds stay under your control — no transactions are required.</p>
               </div>
+
+              <div className="flex items-center justify-between pt-1">
+                <button type="button" onClick={() => setStep(3)} disabled={submitting} className="text-xs font-mono text-white/45 hover:text-white transition-colors uppercase h-10 px-4 rounded hover:bg-white/[0.02] flex items-center gap-1 disabled:opacity-40">
+                  <ChevronLeft className="w-4 h-4" /><span>Back</span>
+                </button>
+                <button type="button" onClick={handleSubmit} disabled={submitting || !isValidEvmAddress(wallet) || !quizComplete}
+                  className="h-12 px-7 bg-panik-orange hover:bg-panik-orange/90 disabled:opacity-50 text-white font-mono text-xs uppercase tracking-wider font-bold rounded-lg flex items-center gap-2 cursor-pointer transition-all active:scale-[0.99]">
+                  {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /><span>Submitting…</span></> : <><span>{submitError ? "Retry" : "Join the waitlist"}</span><ArrowRight className="w-4 h-4" /></>}
+                </button>
+              </div>
+              {!waitlistConfigured && (
+                <p className="text-[10px] font-mono text-amber-400/70 flex items-center gap-1.5"><Info className="w-3 h-3" /> Backend env not set — submit disabled until VITE_SUPABASE_* is configured.</p>
+              )}
             </motion.div>
           )}
 
-          {/* STEP 5: SUCCESS SCREEN */}
+          {/* STEP 5 — SUCCESS */}
           {step === 5 && (
-            <motion.div
-              key="step5"
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.3 }}
-              className="py-4 text-center space-y-6"
-            >
-              {/* Compass symbol rotating styled illustration */}
+            <motion.div key="s5" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.3 }} className="py-4 text-center space-y-6">
               <div className="relative w-16 h-16 mx-auto flex items-center justify-center">
                 <div className="absolute inset-0 bg-emerald-500/10 rounded-full blur-xl scale-125 select-none" />
                 <div className="w-16 h-16 rounded-full border-2 border-emerald-500/30 bg-[#0E1016] flex items-center justify-center relative z-10 select-none">
                   <CheckCircle2 className="w-8 h-8 text-emerald-400 stroke-[2px]" />
                 </div>
               </div>
-
-              {/* Header */}
               <div className="space-y-2">
-                <h2 className="font-display font-medium text-2xl sm:text-3xl text-white tracking-tight">
-                  You're on the list.
-                </h2>
+                <h2 className="font-display font-medium text-2xl sm:text-3xl text-white tracking-tight">You're on the list.</h2>
                 <p className="text-panik-text-secondary text-sm max-w-sm mx-auto leading-relaxed">
-                  We'll contact you when Panik enters beta and when new testing opportunities become available.
+                  {position ? <>Your position is <span className="text-white font-semibold">#{position}</span>. </> : null}
+                  We'll contact you when Panik enters beta and new testing opportunities open.
                 </p>
               </div>
-
-              {/* Checklists status layout */}
               <div className="max-w-xs mx-auto text-left bg-white/[0.02] border border-white/[0.05] rounded-xl p-4.5 space-y-2.5 font-sans text-xs">
                 <div className="flex items-center gap-2.5 text-white/80">
                   <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-[9px]">✓</span>
-                  <span>Email registered ({email})</span>
+                  <span className="truncate">Email registered ({email})</span>
                 </div>
                 <div className="flex items-center gap-2.5 text-white/80">
                   <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-[9px]">✓</span>
-                  <span>Risk Profile indicators submitted</span>
+                  <span>Risk profile submitted{appetite ? ` (${APPETITE_LABEL[appetite]})` : ""}</span>
                 </div>
                 <div className="flex items-center gap-2.5 text-white/80">
                   <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-[9px]">✓</span>
-                  <span>
-                    {connectedWallet 
-                      ? `Beta access reserved (${connectedWallet})` 
-                      : "Beta eligibility status queued"}
-                  </span>
+                  <span>Wallet linked ({wallet.slice(0, 6)}…{wallet.slice(-4)})</span>
                 </div>
               </div>
-
-              {/* Social Channels CTA buttons */}
-              <div className="space-y-3 pt-3">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="w-full h-11 bg-white/[0.04] hover:bg-white/[0.08] text-white border border-white/[0.08] hover:border-white/[0.15] font-mono text-xs uppercase tracking-wider rounded-lg transition-colors cursor-pointer"
-                >
-                  Return to Site
-                </button>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <a
-                    href="https://twitter.com"
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="h-10 px-4 bg-white/[0.02] hover:bg-white/[0.06] text-white border border-white/[0.05] hover:border-white/[0.12] font-mono text-[10px] uppercase tracking-wider rounded-lg flex items-center justify-center gap-2 transition-colors"
-                  >
-                    <Twitter className="w-3.5 h-3.5 fill-current" />
-                    <span>Follow on X</span>
-                  </a>
-
-                  <a
-                    href="https://discord.com"
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="h-10 px-4 bg-white/[0.02] hover:bg-white/[0.06] text-[#5865F2] hover:text-[#5865F2]/90 border border-white/[0.05] hover:border-white/[0.12] font-mono text-[10px] uppercase tracking-wider rounded-lg flex items-center justify-center gap-2 transition-colors"
-                  >
-                    <span>Join Discord</span>
-                  </a>
-                </div>
+              <div className="space-y-3 pt-2">
+                <button type="button" onClick={onClose} className="w-full h-11 bg-white/[0.04] hover:bg-white/[0.08] text-white border border-white/[0.08] hover:border-white/[0.15] font-mono text-xs uppercase tracking-wider rounded-lg transition-colors cursor-pointer">Return to Site</button>
+                <a href="https://twitter.com" target="_blank" rel="noreferrer noopener" className="h-10 px-4 bg-white/[0.02] hover:bg-white/[0.06] text-white border border-white/[0.05] hover:border-white/[0.12] font-mono text-[10px] uppercase tracking-wider rounded-lg flex items-center justify-center gap-2 transition-colors">
+                  <Twitter className="w-3.5 h-3.5 fill-current" /><span>Follow on X for launch news</span>
+                </a>
               </div>
             </motion.div>
           )}

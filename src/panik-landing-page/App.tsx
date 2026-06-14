@@ -19,6 +19,7 @@ import { TechyGlobe } from "./components/TechyGlobe";
 import { WaitlistModal } from "./components/WaitlistModal";
 import { INITIAL_SUBSCRIBERS } from "./data";
 import { WaitlistEntry } from "./types";
+import { getWaitlistCount } from "./lib/waitlist";
 
 export default function App() {
   const [viewMode, setViewMode] = useState<"landing" | "app">("landing");
@@ -39,6 +40,16 @@ export default function App() {
   const [hasSubscribed, setHasSubscribed] = useState<boolean>(() => {
     return localStorage.getItem("panik_has_subscribed") === "true";
   });
+
+  // Real subscriber count from the backend (null until loaded / when offline).
+  // The social-proof feed stays seeded — only this number is real.
+  const [liveCount, setLiveCount] = useState<number | null>(null);
+  const refreshCount = () => { void getWaitlistCount().then(setLiveCount); };
+  useEffect(() => { refreshCount(); }, []);
+
+  // Displayed count: prefer the real backend number; fall back to the seeded
+  // list length when the backend isn't configured/reachable (dev/offline).
+  const displayCount = liveCount ?? subscribers.length;
 
   const [isWaitlistModalOpen, setIsWaitlistModalOpen] = useState(false);
   const [waitlistInitialEmail, setWaitlistInitialEmail] = useState("");
@@ -66,27 +77,13 @@ export default function App() {
     setIsWaitlistModalOpen(true);
   };
 
-  // Submit handler
-  const handleJoinWaitlist = (email: string, source: string = "Authorized Signer") => {
-    if (subscribers.some(sub => sub.email.toLowerCase() === email.toLowerCase())) {
-      setHasSubscribed(true);
-      return;
-    }
-
-    const nextPosition = subscribers.length > 0 
-      ? subscribers[0].position + 1 
-      : 48;
-
-    const newEntry: WaitlistEntry = {
-      email,
-      timestamp: "Just Now",
-      position: nextPosition,
-      source: source
-    };
-
-    // Prepend to top so it's visible in list logs immediately
-    setSubscribers([newEntry, ...subscribers]);
+  // Submit handler — the modal already persisted the signup to Supabase. We do
+  // NOT add the real email to the visible feed (it stays seeded/fake, per the
+  // backend plan — never expose real emails to the browser). Just flag the
+  // cosmetic "subscribed" state and refresh the real count.
+  const handleJoinWaitlist = (_email: string, _source: string = "Waitlist") => {
     setHasSubscribed(true);
+    refreshCount();
   };
 
   if (viewMode === "app") {
@@ -104,7 +101,7 @@ export default function App() {
       {/* Navigation section */}
       <Navigation
         onScrollTo={handleScrollToSection}
-        subscriberCount={subscribers.length}
+        subscriberCount={displayCount}
       />
 
       {/* Global continuous background techy globe spanning Hero and Dashboard preview */}
@@ -115,8 +112,8 @@ export default function App() {
       </div>
 
       {/* Hero section */}
-      <Hero 
-        subscriberCount={subscribers.length} 
+      <Hero
+        subscriberCount={displayCount}
         hasSubscribed={hasSubscribed}
         onLaunchMockup={() => setViewMode("app")}
         onOpenWaitlistModal={handleOpenWaitlistModal}
