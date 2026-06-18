@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PANIK — Black-Swan Backtest</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#ffffff; --ink:#1a1f29; --muted:#5b6472; --line:#e4e8ee;
+    --blue:#2563eb; --orange:#f59e0b; --teal:#0d9488; --red:#dc2626; --gray:#94a3b8; --green:#16a34a;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  header{padding:32px 24px 8px;max-width:1180px;margin:0 auto}
+  h1{margin:0;font-size:28px;letter-spacing:-0.02em}
+  .sub{color:var(--muted);margin:6px 0 0;font-size:15px}
+  .grid{max-width:1180px;margin:18px auto 60px;padding:0 24px;display:grid;grid-template-columns:repeat(2,1fr);gap:18px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 18px 14px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+  .card.wide{grid-column:1 / -1}
+  .card h2{margin:0 0 2px;font-size:16px;letter-spacing:-0.01em}
+  .cap{color:var(--muted);font-size:13px;margin:2px 0 12px}
+  .wrap{position:relative;height:300px}
+  /* confusion matrix */
+  .cm{display:grid;grid-template-columns:120px 1fr 1fr;gap:8px;align-items:stretch}
+  .cm .h{display:flex;align-items:center;justify-content:center;font-weight:600;color:var(--muted);font-size:13px;text-align:center}
+  .cell{border-radius:10px;padding:14px 10px;color:#fff;text-align:center}
+  .cell b{display:block;font-size:22px;line-height:1.1}
+  .cell span{font-size:12px;opacity:.92}
+  .rates{display:flex;gap:18px;margin-top:14px;flex-wrap:wrap}
+  .rate{flex:1;min-width:120px;background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+  .rate b{font-size:22px;display:block}.rate span{color:var(--muted);font-size:12px}
+  footer{max-width:1180px;margin:0 auto 50px;padding:0 24px;color:var(--muted);font-size:12.5px}
+  @media(max-width:780px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>PANIK — Black-Swan Backtest</h1>
+  <p class="sub">Liquidation early-warning, validated on real crashes &middot; 2 chains &middot; 4 protocols &middot; 6 crises &middot; ~7,700 real wallets</p>
+  <p class="sub" style="font-size:13.5px">A position is liquidated when its health factor (HF) reaches ~1.0; PANIK warns <b>CRITICAL</b> earlier. We reconstruct exact on-chain HFs for liquidated <em>and</em> surviving borrowers and replay them through the engine — measuring <b>recall</b> (caught the doomed) and <b>false-alarm</b> (cried wolf on survivors).</p>
+</header>
+
+<div class="grid">
+  <div class="card"><h2>1 &middot; Warning time before liquidation</h2><p class="cap">June-2022 ETH crash, $40M whale / healthy-start cohort. ~2.6&times; more time to act.</p><div class="wrap"><canvas id="c1"></canvas></div></div>
+  <div class="card"><h2>2 &middot; Recall vs false-alarm trade-off</h2><p class="cap">By HF flag threshold. 1.25 shipped — 1.35's +4pt recall costs +10pt false alarms.</p><div class="wrap"><canvas id="c2"></canvas></div></div>
+  <div class="card"><h2>3 &middot; Recall by event: baseline &rarr; shipped</h2><p class="cap">Crash-regime helps ETH-led crashes, never hurts. Pooled false-alarm 27%, precision 35%.</p><div class="wrap"><canvas id="c3"></canvas></div></div>
+  <div class="card"><h2>4 &middot; Multi-protocol on Base (Aug-2024)</h2><p class="cap">Median lead time. All 4 protocols PANIK reads: 100% of liquidations flagged 12&ndash;33h early. (Aave V3 full matrix: 92% recall / 24% false-alarm.)</p><div class="wrap"><canvas id="c4"></canvas></div></div>
+  <div class="card wide"><h2>5 &middot; The $40M whale &mdash; "would it have saved me?"</h2><p class="cap">Reconstructed HF into the June-2022 crash (HF = WETH price / WETH at liquidation). Crash-regime flags CRITICAL ~Jun 12 (HF&le;1.25); the static floor waits until ~Jun 13&ndash;14 (HF&le;1.10). That gap is the saved time.</p><div class="wrap" style="height:340px"><canvas id="c5"></canvas></div></div>
+  <div class="card"><h2>6 &middot; Survivor confusion matrix</h2><p class="cap">Shipped rule, pooled Ethereum cohort. Recall and false-alarm shown together.</p>
+    <div class="cm">
+      <div></div><div class="h">Liquidated (actual)</div><div class="h">Survived (actual)</div>
+      <div class="h">Flagged<br>CRITICAL</div>
+      <div class="cell" style="background:var(--green)"><b>89%</b><span>True positive &mdash; caught</span></div>
+      <div class="cell" style="background:var(--orange)"><b>27%</b><span>False alarm</span></div>
+      <div class="h">Stayed<br>quiet</div>
+      <div class="cell" style="background:var(--red)"><b>11%</b><span>False negative &mdash; missed</span></div>
+      <div class="cell" style="background:var(--teal)"><b>73%</b><span>True negative</span></div>
+    </div>
+    <div class="rates">
+      <div class="rate"><b>89%</b><span>Recall (of doomed, caught)</span></div>
+      <div class="rate"><b>27%</b><span>False-alarm rate</span></div>
+      <div class="rate"><b>35%</b><span>Precision (pop. base rate)</span></div>
+    </div>
+  </div>
+  <div class="card"><h2>7 &middot; The crises we backtested</h2><p class="cap">Aave liquidations (USD debt repaid) &mdash; ground truth, Dune.</p><div class="wrap"><canvas id="c7"></canvas></div></div>
+  <div class="card"><h2>8 &middot; Asset-risk vs the crash-regime gate</h2><p class="cap">Peak S_asset_risk per crash. The crash-regime only fires above 60 — June clears it; intraday/stablecoin crashes don't (the static floor covers those).</p><div class="wrap"><canvas id="c8"></canvas></div></div>
+</div>
+
+<footer>
+  Method: exact health factors via archive RPC (<code>getUserAccountData</code>) + protocol-agnostic price-walk; real engine (<code>computeScore</code>), no proxy. Recall &amp; false-alarm transfer to production; precision is base-rate-dependent. Charts 4 (Compound/Moonwell/Morpho) are recall + lead time only (no per-protocol false-positive — that's an engine property, ~24&ndash;27% on Aave). All numbers from the PANIK backtest; nothing fabricated.
+</footer>
+
+<script>
+const C={blue:'#2563eb',orange:'#f59e0b',teal:'#0d9488',red:'#dc2626',gray:'#94a3b8',green:'#16a34a',ink:'#1a1f29'};
+Chart.defaults.font.family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+Chart.defaults.color="#5b6472";
+const pct={ticks:{callback:v=>v+'%'},grid:{color:'#eef1f5'}};
+const noGridX={grid:{display:false}};
+
+// 1 — lead time
+new Chart(c1,{type:'bar',data:{labels:['Baseline (static floor)','With crash-regime'],
+  datasets:[{data:[17,44],backgroundColor:[C.gray,C.blue],borderRadius:8,barThickness:90}]},
+  options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.raw+' h warning'}}},
+  scales:{y:{title:{display:true,text:'Hours before liquidation'},grid:{color:'#eef1f5'}},x:noGridX}}});
+
+// 2 — recall vs false-alarm
+new Chart(c2,{type:'line',data:{labels:['HF ≤ 1.10','HF ≤ 1.25','HF ≤ 1.35'],
+  datasets:[
+   {label:'Recall',data:[49,89,93],borderColor:C.blue,backgroundColor:C.blue,tension:.25,pointRadius:5,pointBackgroundColor:C.blue},
+   {label:'False-alarm',data:[10,23,33],borderColor:C.orange,backgroundColor:C.orange,tension:.25,pointRadius:5,pointBackgroundColor:C.orange}]},
+  options:{plugins:{legend:{position:'bottom'},tooltip:{callbacks:{title:i=>i[0].label+(i[0].label.includes('1.25')?'  (SHIPPED)':'')}}},
+  scales:{y:{min:0,max:100,...pct,title:{display:true,text:'percent'}},x:noGridX}}});
+
+// 3 — multi-event recall baseline -> shipped
+new Chart(c3,{type:'bar',data:{labels:['June 2022','FTX 2022','UST 2022','USDC 2023','POOLED'],
+  datasets:[
+   {label:'Baseline',data:[49,41,94,97,65],backgroundColor:C.gray,borderRadius:6},
+   {label:'Shipped',data:[88,53,94,97,89],backgroundColor:C.blue,borderRadius:6}]},
+  options:{plugins:{legend:{position:'bottom'}},scales:{y:{min:0,max:100,...pct,title:{display:true,text:'recall'}},x:noGridX}}});
+
+// 4 — multi-protocol lead time
+new Chart(c4,{type:'bar',data:{labels:['Compound III','Moonwell','Morpho'],
+  datasets:[{data:[18,33,12],backgroundColor:[C.teal,C.blue,C.orange],borderRadius:8,barThickness:70}]},
+  options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.raw+'h median lead · 100% caught'}}},
+  scales:{y:{title:{display:true,text:'Median hours of warning'},grid:{color:'#eef1f5'}},x:noGridX}}});
+
+// 5 — whale HF trajectory
+const days=['Jun 06','Jun 07','Jun 08','Jun 09','Jun 10','Jun 11','Jun 12','Jun 13','Jun 14'];
+const hf=[1.53,1.49,1.47,1.47,1.45,1.35,1.24,1.16,1.00];
+const flat=v=>days.map(()=>v);
+new Chart(c5,{type:'line',data:{labels:days,datasets:[
+   {label:'Whale health factor',data:hf,borderColor:C.ink,backgroundColor:C.ink,tension:.2,pointRadius:4,borderWidth:3,fill:false},
+   {label:'Crash-regime fires (HF ≤ 1.25)',data:flat(1.25),borderColor:C.blue,borderDash:[7,5],pointRadius:0,borderWidth:1.5},
+   {label:'Static floor fires (HF ≤ 1.10)',data:flat(1.10),borderColor:C.orange,borderDash:[7,5],pointRadius:0,borderWidth:1.5},
+   {label:'Liquidation (HF = 1.00)',data:flat(1.00),borderColor:C.red,borderDash:[2,4],pointRadius:0,borderWidth:1.5}]},
+  options:{plugins:{legend:{position:'bottom'}},interaction:{intersect:false,mode:'index'},
+  scales:{y:{min:0.95,max:1.6,title:{display:true,text:'Health factor'},grid:{color:'#eef1f5'}},x:noGridX}}});
+
+// 7 — black-swan magnitudes
+new Chart(c7,{type:'bar',data:{labels:['stETH / June 22','UST / LUNA','FTX','USDC depeg'],
+  datasets:[{data:[143,93,21,8],backgroundColor:[C.blue,C.teal,C.orange,C.gray],borderRadius:8}]},
+  options:{indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'$'+c.raw+'M liquidated'}}},
+  scales:{x:{title:{display:true,text:'USD debt repaid ($M)'},grid:{color:'#eef1f5'}},y:noGridX}}});
+
+// 8 — asset risk vs gate
+new Chart(c8,{type:'bar',data:{labels:['June','FTX','UST','USDC','Aug-24 Base'],
+  datasets:[
+   {type:'line',label:'Gate (60)',data:[60,60,60,60,60],borderColor:C.red,borderDash:[6,5],pointRadius:0,borderWidth:1.5},
+   {label:'Peak S_asset_risk',data:[82,65,57,2,52],borderRadius:6,
+     backgroundColor:ctx=>ctx.raw>=60?C.blue:C.gray}]},
+  options:{plugins:{legend:{position:'bottom'}},scales:{y:{min:0,max:100,title:{display:true,text:'S_asset_risk'},grid:{color:'#eef1f5'}},x:noGridX}}});
+</script>
+</body>
+</html>
