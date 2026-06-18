@@ -20,7 +20,7 @@ the engine is **measured, not asserted**, on real historical crashes:
 | Lead time before liquidation (June 2022, $40M whale) | **17h → 44h** with the crash-regime escalation |
 | Recall — flagged before liquidation (4 crashes, full population) | **89%** pooled |
 | False-alarm rate | ~**27%** (intrinsic in deep crashes) |
-| Scope validated | WETH/stable + USDC-collateral, Aave V2 Ethereum, 4 black swans, ~6,800 wallets |
+| Scope validated | 5 crashes on Aave (V2 Ethereum + V3 Base) + Compound/Moonwell/Morpho on Base; ~7,700 real wallets |
 | Same engine runs live | Yes — real-time API + forward-test on current positions |
 
 ## Why it's a good MVP for level 3–4
@@ -41,8 +41,9 @@ the engine is **measured, not asserted**, on real historical crashes:
    not having to build it yourself**, not "we have a score."
 2. **Alerts ≠ action.** Level 4–5 users increasingly want *automation* (auto-deleverage, one-click
    exit). The exit MVP is parked; against free alerting, a pure-alert tool has a thin wedge at the top.
-3. **Scope is narrower than how level-5 users trade** — multi-chain, exotic collateral, looped
-   positions are not yet covered.
+3. **Collateral breadth is still narrow** — validated across all four protocols (Aave/Compound/
+   Moonwell/Morpho) and two chains (Ethereum + Base), but mostly on ETH-correlated collateral +
+   stablecoin debt. Exotic/BTC collateral and looped positions are not yet covered.
 4. **Alert fatigue risk** — ~27% false alarms in deep crashes; needs per-user risk profiles (partly
    built) and crisp "why now" explanations.
 

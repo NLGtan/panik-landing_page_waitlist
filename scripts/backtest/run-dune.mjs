@@ -42,7 +42,7 @@ async function api(path, init, attempts = 8) {
       console.error(`rows: ${res.result.rows.length}  (query ${c.query_id})`);
       return;
     }
-    if (res?.state === "QUERY_STATE_FAILED") throw new Error("failed: " + JSON.stringify(res).slice(0, 300));
+    if (res?.state === "QUERY_STATE_FAILED") throw new Error("failed: " + JSON.stringify(res).slice(0, 1200));
     await sleep(4000);
   }
   throw new Error("timed out");

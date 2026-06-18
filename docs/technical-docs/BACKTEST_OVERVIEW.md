@@ -145,31 +145,45 @@ Crash-regime was neutral because Aug-5-2024 was an *intraday* crash that recover
 so the 30d-vol gate peaked at 52 (< 60) — the static floor caught it regardless. Reproduce:
 `fetch-survivors-base.mjs aave-aug24` + `survivor-matrix-base.ts aave-aug24 7749291`.
 
-**Validated — Compound III on Base, Aug-2024 (117 real WETH-collateral liquidations).** A
-protocol-agnostic *price-walk* (a position is liquidated when HF≈1, so with stablecoin debt
-`HF(t)=WETH(t)/WETH(t_liq)` — no protocol-specific health call needed) replayed each liquidation
-through the real engine: **100% caught CRITICAL before liquidation, median 18h lead** (crash-regime
-neutral — same intraday-flash reason). This is recall + lead time, not a survivor false-positive rate
-(price-walk has no HF≈1 anchor for survivors; the FP rate is an engine property already measured on
-Aave). Reproduce: `price-walk.ts compound-aug24-liq.json`.
+**Validated — Compound III, Moonwell, and Morpho on Base, Aug-2024.** For the three non-Aave
+protocols we used a protocol-agnostic *price-walk*: a position is liquidated when HF≈1, so with
+stablecoin debt `HF(t)=collateralPrice(t)/collateralPrice(t_liq)` — no protocol-specific health call
+needed. Each real liquidated position is replayed through the live engine and we measure how early it
+first reached CRITICAL. Collateral sources differ by protocol (the `lending` spell pairs collateral
+only for Aave/Compound): Moonwell from `moonwell_base.m*_evt_liquidateborrow.mTokenCollateral`, Morpho
+from `morphoblue_call_liquidate.marketParams` (ETH-LST collateral / USDC debt; LSTs track ETH so the
+WETH walk applies).
 
-**Remaining — Moonwell & Morpho.** The unified `lending` spell pairs collateral cleanly for Aave and
-Compound (WETH→USDC) but **not** for Moonwell (Compound-v2 fork; collateral seize isn't tagged in the
-spell — pull from `moonwell_base.m*_evt_liquidateborrow.mTokenCollateral`) or Morpho (Blue's isolated
-collateral isn't a "supply" event — pull from the Morpho `Liquidate` event + market params). Both
-then price-walk the same way. Full survivor matrices for the three would additionally need their own
-health readers (Comet `isLiquidatable`+collateral math; Moonwell `getAccountLiquidity`; Morpho
-`position`+oracle); the price-walk gives recall+lead-time without them. Then Feb/Apr-2025 for all.
+| Protocol (Base) | Method | Liquidations | Caught CRITICAL before liq | Median lead |
+| --- | --- | --- | --- | --- |
+| Aave V3 | survivor matrix (exact HF) | 2,068 | 92% recall · 24% false-alarm | — |
+| Compound III | price-walk | 117 | **100%** | 18h |
+| Moonwell | price-walk | 564 | **100%** | 33h |
+| Morpho Blue | price-walk | 192 | **100%** | 12h |
+
+All four protocols PANIK reads are now validated on Base. The crash-regime was neutral on all (Aug-5
+intraday flash, 30d-vol gate 52 < 60) — the static floor delivers the 12–33h of warning. The
+price-walk gives **recall + lead time** (100% caught: as HF→1 every liquidated position trips the
+floor); it is **not** a per-protocol survivor false-positive rate (no HF≈1 anchor for survivors —
+that's an engine property, measured at 24–27% on Aave). Full survivor matrices for the three would
+additionally need their own health readers (Comet `isLiquidatable`; Moonwell `getAccountLiquidity`;
+Morpho `position`+oracle). Reproduce: `price-walk.ts {compound,moonwell,morpho}-aug24-liq.json`.
+Next: extend to Feb/Apr-2025 (the sustained crashes that should trip the crash-regime gate).
 
 ## 8. Validated scope & limitations
 
-- **Position type:** WETH-collateral / stablecoin-debt (and USDC-collateral for the depeg). Not yet
-  BTC/alt collateral or volatile-debt.
-- **Protocol/chain:** Aave V2 Ethereum. Not yet Aave V3 / Base / Moonwell / Morpho / Compound.
-- **Sampling:** UST & USDC are dense (6h); June & FTX use 4 daily blocks, so their recall (88%/53%)
-  is a *floor* — the real 60s loop samples far denser. June's continuous hourly replay caught 19/19.
+- **Protocol/chain:** Aave V2 (Ethereum) with full survivor matrices; **Aave V3, Compound III,
+  Moonwell, and Morpho on Base** validated for the Aug-2024 crash (Aave V3 full matrix; the other
+  three recall+lead-time via price-walk). Per-protocol survivor false-positive on Base, and Feb/Apr-2025,
+  are the next extensions.
+- **Position type:** mostly WETH/ETH-LST collateral + stablecoin debt (and USDC-collateral for the
+  depeg). Not yet BTC/alt collateral or volatile-debt.
+- **Method:** the price-walk gives recall + lead time (not false-positive — no survivor HF≈1 anchor);
+  the survivor matrix gives recall + false-alarm + precision but needs a per-protocol exact-HF reader.
+- **Sampling:** UST & USDC (Eth) and Aave-V3-Base are dense (6h); June & FTX use 4 daily blocks, so
+  their recall is a *floor* — the real 60s loop samples far denser. June's hourly replay caught 19/19.
 - **Systemic input held flat** in replay (TVL unavailable offline) — conservative (under-warns).
-- Not yet mentor-signed-off; all work uncommitted.
+- Not yet mentor-signed-off.
 
 ## 9. Data, scripts & queries (reproduction)
 
