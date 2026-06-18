@@ -9,3 +9,7 @@ coverage/
 
 # Personal daily logs — not for the shared repo
 Progress/
+
+# Backtest runtime artifacts (mutable log / local query-id cache)
+scripts/backtest/data/forward-test-log.jsonl
+scripts/backtest/data/cohort-query-id.json

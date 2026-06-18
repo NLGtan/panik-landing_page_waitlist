@@ -68,7 +68,35 @@ const db = new pg.Pool({
   connectionString: dbUrl,
   ssl: { rejectUnauthorized: false },
   max: 2,
+  // The ap-northeast-2 (Seoul) pooler cold-connects in ~5s from here; 8s left no
+  // headroom for jitter, which is what produced the connection-timeout crashes.
+  connectionTimeoutMillis: 15_000,
+  idleTimeoutMillis: 30_000,
+  keepAlive: true,
 });
+
+// pg.Pool emits 'error' on IDLE clients when the connection drops (e.g. the
+// Supabase pooler resetting the TCP socket). With no listener, Node treats it as
+// an unhandled error event and kills the whole process — this is the ECONNRESET
+// death we kept hitting. Swallow + log so a dropped idle client self-heals.
+db.on("error", (err) => console.error(`db pool error (recovered): ${err.message}`));
+
+// One retry: a single pooler reset on the first packet is common and harmless.
+async function queryWatched() {
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const { rows } = await db.query<{ wallet: string; risk_profile: RiskProfile; label: string | null }>(
+        "select wallet, risk_profile, label from public.watched_wallets where is_active order by created_at",
+      );
+      return rows;
+    } catch (err) {
+      lastErr = err;
+      console.error(`watched_wallets query attempt ${attempt} failed: ${(err as Error).message.slice(0, 100)}`);
+    }
+  }
+  throw lastErr;
+}
 
 // ── live wallet scores (60s cache regardless of polling tabs) ─────────────
 export interface LivePosition extends ActiveScore {
@@ -82,9 +110,17 @@ let scoresCache: { at: number; positions: LivePosition[] } = { at: 0, positions:
 async function getScores(): Promise<typeof scoresCache> {
   if (Date.now() - scoresCache.at < 60_000) return scoresCache;
 
-  const { rows } = await db.query<{ wallet: string; risk_profile: RiskProfile; label: string | null }>(
-    "select wallet, risk_profile, label from public.watched_wallets where is_active order by created_at",
-  );
+  let rows: { wallet: string; risk_profile: RiskProfile; label: string | null }[];
+  try {
+    rows = await queryWatched();
+  } catch (err) {
+    // DB unreachable — serve the last good cache (even if stale) rather than 500ing.
+    if (scoresCache.positions.length) {
+      console.error(`scores: DB unreachable, serving stale cache (${(err as Error).message.slice(0, 80)})`);
+      return scoresCache;
+    }
+    throw err;
+  }
 
   const positions: LivePosition[] = [];
   for (const w of rows) {
@@ -235,9 +271,18 @@ app.get("/api/chain", async (_req, res) => {
   }
 });
 
+// Dev safety net: never let a stray upstream rejection take the whole API down.
+process.on("unhandledRejection", (reason) =>
+  console.error(`unhandledRejection (kept alive): ${reason instanceof Error ? reason.message : String(reason)}`),
+);
+
 // Bind IPv4 explicitly — pairs with the Vite proxy's 127.0.0.1 target.
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`PANIK scoring API on http://127.0.0.1:${PORT}  (scores|compass|prospective|chain)`);
-  void getScores().then((c) => console.log(`warmed: ${c.positions.length} live positions`));
-  void getCompass().then((c) => console.log(`warmed: ${c.scores.length} compass scenarios`));
+  void getScores()
+    .then((c) => console.log(`warmed: ${c.positions.length} live positions`))
+    .catch((e) => console.error(`scores warmup skipped: ${(e as Error).message.slice(0, 100)}`));
+  void getCompass()
+    .then((c) => console.log(`warmed: ${c.scores.length} compass scenarios`))
+    .catch((e) => console.error(`compass warmup skipped: ${(e as Error).message.slice(0, 100)}`));
 });

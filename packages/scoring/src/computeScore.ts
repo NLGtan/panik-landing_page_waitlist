@@ -1,5 +1,5 @@
 import { clamp } from "./math";
-import { COMPOSITE_WEIGHTS, LIQUIDATION_PROXIMITY_FLOORS } from "./params";
+import { COMPOSITE_WEIGHTS, CRASH_REGIME, LIQUIDATION_PROXIMITY_FLOORS } from "./params";
 import { scoreAssetRisk } from "./subscores/assetRisk";
 import { scorePositionHealth } from "./subscores/positionHealth";
 import { scoreProtocolSafety } from "./subscores/protocolSafety";
@@ -19,7 +19,10 @@ export function bandFor(score: number): Band {
  * Pure function: same input, same output, no I/O. Both scoring modes
  * (prospective/Compass, active/Watch) call this with adapter-built input.
  */
-export function computeScore(input: ScoringInput): ScoreResult {
+export function computeScore(
+  input: ScoringInput,
+  opts: { crashRegime?: boolean } = {},
+): ScoreResult {
   const subScores: SubScores = {
     positionHealth: scorePositionHealth(input.positionHealth),
     assetRisk: scoreAssetRisk(input.assetRisk),
@@ -49,6 +52,25 @@ export function computeScore(input: ScoringInput): ScoreResult {
         break;
       }
     }
+
+    // Crash-regime escalation — see params.ts. In a saturated sell-off, a
+    // position further from liquidation than the static floor is still "exit
+    // now": HF erodes in hours mid-crash. Gated on high asset risk so it stays
+    // silent in calm markets and stablecoin depegs.
+    // (An acute short-horizon drawdown trigger was tested as v2 and REJECTED —
+    // the static floor already catches fast crashes under dense monitoring, and
+    // the trigger added far more false alarms than catches. See BACKTEST_RESULTS.)
+    if (
+      opts.crashRegime !== false &&
+      subScores.assetRisk >= CRASH_REGIME.assetRiskAtOrAbove &&
+      hf <= CRASH_REGIME.hfAtOrBelow
+    ) {
+      total = Math.max(total, CRASH_REGIME.minScore);
+    }
+    // (A stablecoin peg-deviation escalation was tested as well and REJECTED:
+    // a depeg reprices the collateral via the oracle, so HF already drops and the
+    // static floor catches it — the peg term was redundant and only added false
+    // alarms (recall 97%→97%, false-alarm 27%→38%). See BACKTEST_RESULTS.)
   }
 
   return { total, band: bandFor(total), subScores };

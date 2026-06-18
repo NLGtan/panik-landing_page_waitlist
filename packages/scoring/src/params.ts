@@ -38,6 +38,45 @@ export const LIQUIDATION_PROXIMITY_FLOORS = [
   { hfAtOrBelow: 1.25, minScore: 50 }, // ≤ 20% from liquidation → HIGH
 ] as const;
 
+/**
+ * Crash-regime escalation — backtest finding (2026-06-16).
+ *
+ * Evidence (docs/technical-docs/BACKTEST_RESULTS.md; 19 real Aave V2 WETH
+ * positions liquidated in the Jun-2022 ETH crash, reconstructed per-wallet):
+ * with only the static proximity floors, CRITICAL fired at a median HF of 1.10 —
+ * i.e. almost solely from the HF ≤ 1.1 floor — giving a median 22h of CRITICAL
+ * warning (the $40M whale got 17h) even though asset risk was saturated and the
+ * market had been in freefall for ~2 days. HIGH fired ~57h out; the escalation
+ * to "exit now" lagged 35h behind the danger the engine had already detected.
+ *
+ * Fix: in a saturated sell-off (S_asset_risk high) a position further from
+ * liquidation than the static floor is already CRITICAL, because HF erodes in
+ * hours mid-crash. Gated on BOTH high asset risk AND moderate proximity, so it
+ * is silent in calm markets (asset risk low) and in stablecoin depegs (asset
+ * risk ~0 — the HF floor handles those). Never lowers a score.
+ *
+ * Gate calibration (measured, not fitted): S_asset_risk on WETH was ~44–45 in
+ * the calm Apr/early-May market and ~66–83 once the June crash began — a clean
+ * regime gap. The 60 gate sits in that gap (~15pt margin each side), so it
+ * separates "crash" from "merely volatile" without p-hacking the cohort.
+ *
+ * HF gate = 1.25 chosen by the survivor-control matrix (560 wallets, exact HF
+ * via archive RPC): 1.25 gives recall 89% / false-alarm 23%, vs 1.35's 93%/33%
+ * — the last 4pt of recall cost 10pt of false alarms, a poor trade. Lead time
+ * holds (healthy-start median 44h vs baseline 17h).
+ *
+ * An acute short-horizon drawdown trigger (v2) was investigated to extend this
+ * to fast/stablecoin-led crashes (UST/LUNA), then REJECTED: dense (6h) survivor
+ * sampling showed the static floor already catches UST at 94% recall — the
+ * apparent "UST gap" was a sampling artifact — and the drawdown trigger traded
+ * +6pt recall for +17pt false alarms. Kept the vol-gated rule. See BACKTEST_RESULTS.
+ */
+export const CRASH_REGIME = {
+  assetRiskAtOrAbove: 60,
+  hfAtOrBelow: 1.25,
+  minScore: 75,
+} as const;
+
 /** Composite weights — arch §Composite Score. Must sum to 1. */
 export const COMPOSITE_WEIGHTS = {
   positionHealth: 0.4,
