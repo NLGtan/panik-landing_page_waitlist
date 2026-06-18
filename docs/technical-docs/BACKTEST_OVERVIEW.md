@@ -145,10 +145,21 @@ Crash-regime was neutral because Aug-5-2024 was an *intraday* crash that recover
 so the 30d-vol gate peaked at 52 (< 60) — the static floor caught it regardless. Reproduce:
 `fetch-survivors-base.mjs aave-aug24` + `survivor-matrix-base.ts aave-aug24 7749291`.
 
-**Remaining (staged, each needs its own health reader — the genuinely new engineering):**
-Moonwell & Compound-v2-fork (`getAccountLiquidity` → shortfall), Compound III Comet
-(`isLiquidatable` + collateral math), Morpho Blue (per-market `position` + oracle); then Feb/Apr-2025
-for all. Cohort puller (`pull-cohort-base.mjs`) and Base blocks are protocol-agnostic and reusable.
+**Validated — Compound III on Base, Aug-2024 (117 real WETH-collateral liquidations).** A
+protocol-agnostic *price-walk* (a position is liquidated when HF≈1, so with stablecoin debt
+`HF(t)=WETH(t)/WETH(t_liq)` — no protocol-specific health call needed) replayed each liquidation
+through the real engine: **100% caught CRITICAL before liquidation, median 18h lead** (crash-regime
+neutral — same intraday-flash reason). This is recall + lead time, not a survivor false-positive rate
+(price-walk has no HF≈1 anchor for survivors; the FP rate is an engine property already measured on
+Aave). Reproduce: `price-walk.ts compound-aug24-liq.json`.
+
+**Remaining — Moonwell & Morpho.** The unified `lending` spell pairs collateral cleanly for Aave and
+Compound (WETH→USDC) but **not** for Moonwell (Compound-v2 fork; collateral seize isn't tagged in the
+spell — pull from `moonwell_base.m*_evt_liquidateborrow.mTokenCollateral`) or Morpho (Blue's isolated
+collateral isn't a "supply" event — pull from the Morpho `Liquidate` event + market params). Both
+then price-walk the same way. Full survivor matrices for the three would additionally need their own
+health readers (Comet `isLiquidatable`+collateral math; Moonwell `getAccountLiquidity`; Morpho
+`position`+oracle); the price-walk gives recall+lead-time without them. Then Feb/Apr-2025 for all.
 
 ## 8. Validated scope & limitations
 
