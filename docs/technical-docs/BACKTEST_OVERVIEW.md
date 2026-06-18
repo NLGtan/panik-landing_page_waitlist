@@ -202,6 +202,10 @@ Next: extend to Feb/Apr-2025 (the sustained crashes that should trip the crash-r
 - `verify-assetrisk-multi.ts` — confirms the asset-risk gate per event.
 - `forward-test.ts` — **real-time** forward-test: scores live positions via the API, logs band
   transitions to `data/forward-test-log.jsonl` (run on a 60s loop). Live counterpart of the backtest.
+- `run-dune.mjs` — robust ad-hoc Dune-API query runner (bypasses the flaky MCP transport).
+- `price-walk.ts` — protocol-agnostic recall+lead-time validator (Compound/Moonwell/Morpho).
+- `CHARTS_PROMPT.md` — hand to an AI agent to generate charts/graphs of these results from the
+  real data (lead-time bars, recall/false-alarm curve, per-wallet HF trajectories, etc.).
 
 **Data (`scripts/backtest/data/`):** `{june,ust,ftx,usdc}-{candidates,hf}.json` (full population).
 
