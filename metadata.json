@@ -1,6 +1,4 @@
 {
   "name": "PANIK",
-  "description": "DeFi Risk Intelligence waitlist landing page and position auditing simulator for web.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "description": "DeFi Risk Intelligence — liquidation risk scoring and early-warning."
 }

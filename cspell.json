@@ -39,7 +39,6 @@
     "esbuild",
     "autoprefixer",
     "dotenv",
-    "genai",
     "noopener",
     "noreferrer",
     "roadmap",
