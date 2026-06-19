@@ -5,13 +5,16 @@
 
 import React, { useState } from "react";
 import { ShieldAlert, Crosshair, ChevronDown, ChevronRight, Compass, Eye, Zap, Shield, Menu, X } from "lucide-react";
+import { PanikLogoMark } from "./PanikLogo";
 
 interface NavigationProps {
   onScrollTo: (sectionId: string) => void;
   subscriberCount: number;
+  onOpenWaitlistModal: () => void;
+  hasSubscribed?: boolean;
 }
 
-export function Navigation({ onScrollTo, subscriberCount }: NavigationProps) {
+export function Navigation({ onScrollTo, subscriberCount, onOpenWaitlistModal, hasSubscribed = false }: NavigationProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
@@ -25,9 +28,7 @@ export function Navigation({ onScrollTo, subscriberCount }: NavigationProps) {
             className="flex items-center gap-3 cursor-pointer group"
             id="nav-logo-container"
           >
-            <div className="relative flex items-center justify-center w-8 h-8 rounded-md bg-[#111318] border border-white/[0.08] group-hover:border-panik-orange/50 transition-all duration-300">
-              <Crosshair className="w-4 h-4 text-panik-orange group-hover:scale-110 transition-transform duration-300" />
-            </div>
+            <PanikLogoMark size={32} />
             <span className="font-display font-medium text-lg tracking-[0.1em] text-[#F8FAFC] group-hover:text-white transition-colors uppercase">
               PANIK
             </span>
@@ -85,19 +86,9 @@ export function Navigation({ onScrollTo, subscriberCount }: NavigationProps) {
             </button>
             
             <span className="text-white/5 select-none">•</span>
-            
-            <button 
-              onClick={() => onScrollTo("protocols")} 
-              className="hover:text-[#F8FAFC] transition-colors cursor-pointer uppercase font-medium"
-              id="btn-nav-protocols"
-            >
-              Protocols
-            </button>
 
-            <span className="text-white/5 select-none">•</span>
-
-            <button 
-              onClick={() => onScrollTo("faq")} 
+            <button
+              onClick={() => onScrollTo("faq")}
               className="hover:text-[#F8FAFC] transition-colors cursor-pointer uppercase font-medium"
               id="btn-nav-faq"
             >
@@ -105,8 +96,18 @@ export function Navigation({ onScrollTo, subscriberCount }: NavigationProps) {
             </button>
           </div>
 
-          {/* Right Area (Desktop) — spacer to preserve nav balance */}
-          <div className="hidden md:flex items-center gap-4"></div>
+          {/* Right Area (Desktop) — persistent CTA */}
+          <div className="hidden md:flex items-center gap-4">
+            {!hasSubscribed && (
+              <button
+                type="button"
+                onClick={onOpenWaitlistModal}
+                className="h-9 px-5 bg-panik-orange hover:bg-panik-orange/90 text-white font-mono text-[11px] uppercase tracking-wider font-semibold rounded-lg flex items-center gap-2 transition-all duration-300 cursor-pointer shadow-md shadow-orange-500/20"
+              >
+                JOIN WAITLIST →
+              </button>
+            )}
+          </div>
 
           {/* Hamburger Menu (Mobile Toggle) */}
           <button 
@@ -125,6 +126,15 @@ export function Navigation({ onScrollTo, subscriberCount }: NavigationProps) {
       {mobileMenuOpen && (
         <div className="fixed inset-0 top-20 z-45 bg-[#09090B] md:hidden border-t border-white/[0.05] p-6 flex flex-col justify-between">
           <div className="space-y-6 pt-4">
+            {!hasSubscribed && (
+              <button
+                type="button"
+                onClick={() => { onOpenWaitlistModal(); setMobileMenuOpen(false); }}
+                className="w-full h-12 bg-panik-orange hover:bg-panik-orange/90 text-white font-mono text-xs uppercase tracking-wider font-semibold rounded-lg flex items-center justify-center gap-2 transition-all duration-300 cursor-pointer shadow-lg shadow-orange-500/20"
+              >
+                JOIN WAITLIST →
+              </button>
+            )}
             <button 
               onClick={() => {
                 onScrollTo("how-it-works");
@@ -143,15 +153,6 @@ export function Navigation({ onScrollTo, subscriberCount }: NavigationProps) {
             >
               02 // SCORING ENGINE
             </button>
-            <button 
-              onClick={() => {
-                onScrollTo("protocols");
-                setMobileMenuOpen(false);
-              }}
-              className="block w-full text-left text-sm font-mono text-panik-text-primary hover:text-panik-orange transition-colors"
-            >
-              03 // SUPPORTED PROTOCOLS
-            </button>
             <button
               onClick={() => {
                 onScrollTo("faq");
@@ -159,7 +160,7 @@ export function Navigation({ onScrollTo, subscriberCount }: NavigationProps) {
               }}
               className="block w-full text-left text-sm font-mono text-panik-text-primary hover:text-panik-orange transition-colors"
             >
-              04 // FREQUENTLY ASKED QUESTIONS
+              03 // FREQUENTLY ASKED QUESTIONS
             </button>
           </div>
         </div>

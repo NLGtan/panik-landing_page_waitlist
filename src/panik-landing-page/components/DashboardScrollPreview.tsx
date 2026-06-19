@@ -284,19 +284,7 @@ export function DashboardScrollPreview() {
                 <span className="w-2.5 h-2.5 rounded-full bg-red-500/80"></span>
                 <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/80"></span>
                 <span className="w-2.5 h-2.5 rounded-full bg-green-500/80"></span>
-                <span className="text-[10px] font-mono tracking-wider text-white/50 ml-3.5 uppercase">PANIK SENTRY PORTFOLIO • ORACLE LIVE V1.0.8</span>
               </div>
-            
-            <div className="flex gap-4 items-center">
-              <div className="hidden sm:flex items-center gap-1.5 text-[9px] font-mono text-emerald-400 bg-emerald-500/5 px-2 py-0.5 border border-emerald-500/10 rounded">
-                <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span>DAEMON ACTIVE</span>
-              </div>
-              <div className="text-[10px] font-mono text-white/40 border border-white/[0.08] px-2.5 py-0.5 rounded bg-white/[0.02] flex items-center gap-1.5 font-bold">
-                <Wallet className="w-3 h-3 text-panik-orange" />
-                <span>0x8F94...42fA</span>
-              </div>
-            </div>
           </div>
 
           {/* Inner Layout Container */}
@@ -306,12 +294,9 @@ export function DashboardScrollPreview() {
             <aside className="w-48 border-r border-[#1C1E24] bg-[#090B0F] p-4 flex flex-col justify-between shrink-0 select-none z-30 font-mono">
               <div className="space-y-6">
                 <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-md bg-panik-orange/10 border border-panik-orange/30 flex items-center justify-center">
-                    <ShieldCheck className="w-3.5 h-3.5 text-panik-orange" />
-                  </div>
+                  <img src="/panik-logo.png" alt="PANIK" width={24} height={24} style={{ objectFit: "contain" }} />
                   <div className="flex flex-col text-left">
                     <span className="font-display font-black text-[11px] tracking-wider text-white leading-none">PANIK</span>
-                    <span className="text-[5.5px] font-mono tracking-widest text-[#F97316] font-bold mt-0.5 uppercase">SENTRY PROTECTION</span>
                   </div>
                 </div>
 
@@ -434,8 +419,8 @@ export function DashboardScrollPreview() {
                           {/* Position 1 */}
                           <div className="bg-[#111317]/60 border border-white/[0.03] p-2 rounded-xl flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <div className="w-6.5 h-6.5 rounded-full bg-[#8B5CF6]/10 border border-[#8B5CF6]/20 flex items-center justify-center text-[#8B5CF6] shrink-0 font-display font-black text-[9px]">
-                                A
+                              <div className="w-6.5 h-6.5 rounded-sm bg-[#8B5CF6]/20 border border-[#8B5CF6]/30 flex items-center justify-center shrink-0 overflow-hidden">
+                                <img src="/aave-logo.png" alt="Aave" className="w-full h-full object-contain" />
                               </div>
                               <div className="text-left font-mono">
                                 <div className="text-[8.5px] font-black text-white">Aave V3 • USDC SUPPLY BUFFER</div>
@@ -455,8 +440,8 @@ export function DashboardScrollPreview() {
                           {/* Position 2 */}
                           <div className="bg-[#111317]/60 border border-white/[0.03] p-2 rounded-xl flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <div className="w-6.5 h-6.5 rounded-full bg-[#10B981]/10 border border-[#10B981]/20 flex items-center justify-center text-[#10B981] shrink-0 font-display font-black text-[9px]">
-                                C
+                              <div className="w-6.5 h-6.5 rounded-sm bg-[#10B981]/20 border border-[#10B981]/30 flex items-center justify-center shrink-0 overflow-hidden">
+                                <img src="/compound-logo.png" alt="Compound" className="w-full h-full object-contain" />
                               </div>
                               <div className="text-left font-mono">
                                 <div className="text-[8.5px] font-black text-white">Compound • USDT LIQUIDITY YIELD</div>
@@ -476,8 +461,8 @@ export function DashboardScrollPreview() {
                           {/* Position 3 */}
                           <div className="bg-[#111317]/60 border border-white/[0.03] p-2 rounded-xl flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <div className="w-6.5 h-6.5 rounded-full bg-[#3B82F6]/10 border border-[#3B82F6]/20 flex items-center justify-center text-[#3B82F6] shrink-0 font-display font-black text-[9px]">
-                                A
+                              <div className="w-6.5 h-6.5 rounded-sm bg-[#8B5CF6]/20 border border-[#8B5CF6]/30 flex items-center justify-center shrink-0 overflow-hidden">
+                                <img src="/aave-logo.png" alt="Aave" className="w-full h-full object-contain" />
                               </div>
                               <div className="text-left font-mono">
                                 <div className="text-[8.5px] font-black text-white">Aave V3 • wstETH / USDC VAULT</div>
@@ -614,9 +599,7 @@ export function DashboardScrollPreview() {
                           <div className="bg-[#111317]/60 border border-white/[0.04] p-3 rounded-xl flex flex-col justify-between text-left relative overflow-hidden">
                             <div className="flex justify-between items-start mb-2">
                               <div className="flex items-center gap-2">
-                                <div className="w-7 h-7 rounded-sm bg-[#8B5CF6]/15 border border-[#8B5CF6]/30 flex items-center justify-center text-[#8B5CF6] shrink-0 font-display font-black text-[10px]">
-                                  A
-                                </div>
+                                <img src="/aave-logo.png" alt="Aave" className="w-7 h-7 rounded-sm shrink-0 object-contain" />
                                 <div className="text-left font-mono">
                                   <h4 className="text-[9.5px] font-black text-white leading-tight">Aave V3</h4>
                                   <p className="text-[6.5px] text-[#8E9BAE] uppercase tracking-wide leading-none mt-0.5">WSTETH / USDC VAULT</p>
@@ -661,8 +644,8 @@ export function DashboardScrollPreview() {
                           <div className="bg-[#111317]/60 border border-white/[0.04] p-3 rounded-xl flex flex-col justify-between text-left relative overflow-hidden">
                             <div className="flex justify-between items-start mb-2">
                               <div className="flex items-center gap-2">
-                                <div className="w-7 h-7 rounded-sm bg-[#10B981]/15 border border-[#10B981]/30 flex items-center justify-center text-[#10B981] shrink-0 font-display font-black text-[10px]">
-                                  C
+                                <div className="w-7 h-7 rounded-sm bg-[#10B981]/20 border border-[#10B981]/30 flex items-center justify-center shrink-0 overflow-hidden">
+                                  <img src="/compound-logo.png" alt="Compound" className="w-full h-full object-contain" />
                                 </div>
                                 <div className="text-left font-mono">
                                   <h4 className="text-[9.5px] font-black text-white leading-tight">Compound</h4>
@@ -718,9 +701,7 @@ export function DashboardScrollPreview() {
                           <div className="bg-[#111317]/30 border border-white/[0.02] p-3 rounded-xl flex flex-col justify-between text-left relative overflow-hidden opacity-85">
                             <div className="flex justify-between items-start mb-2">
                               <div className="flex items-center gap-2">
-                                <div className="w-7 h-7 rounded-sm bg-[#8B5CF6]/10 border border-[#8B5CF6]/20 flex items-center justify-center text-[#8B5CF6] shrink-0 font-display font-black text-[10px]">
-                                  A
-                                </div>
+                                <img src="/aave-logo.png" alt="Aave" className="w-7 h-7 rounded-sm shrink-0 object-contain" />
                                 <div className="text-left font-mono">
                                   <h4 className="text-[9.5px] font-black text-white leading-tight">Aave V3</h4>
                                   <p className="text-[6.5px] text-[#8E9BAE] uppercase tracking-wide leading-none mt-0.5">USDC SUPPLY BUFFER</p>
@@ -758,8 +739,8 @@ export function DashboardScrollPreview() {
                           <div className="bg-[#111317]/30 border border-white/[0.02] p-3 rounded-xl flex flex-col justify-between text-left relative overflow-hidden opacity-85">
                             <div className="flex justify-between items-start mb-2">
                               <div className="flex items-center gap-2">
-                                <div className="w-7 h-7 rounded-sm bg-[#10B981]/10 border border-[#10B981]/20 flex items-center justify-center text-[#10B981] shrink-0 font-display font-black text-[10px]">
-                                  C
+                                <div className="w-7 h-7 rounded-sm bg-[#10B981]/20 border border-[#10B981]/30 flex items-center justify-center shrink-0 overflow-hidden">
+                                  <img src="/compound-logo.png" alt="Compound" className="w-full h-full object-contain" />
                                 </div>
                                 <div className="text-left font-mono">
                                   <h4 className="text-[9.5px] font-black text-white leading-tight">Compound</h4>

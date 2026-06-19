@@ -217,6 +217,9 @@ const VAULT_PRESETS: VaultPreset[] = [
 export function AppDemo() {
   // Navigation tabs exactly reflecting the Figma screenshot
   const [activeTab, setActiveTab] = useState<SidebarTab>("portfolio");
+  const [tooltipStep, setTooltipStep] = useState<number | null>(
+    () => localStorage.getItem("panik_tour_seen") === "true" ? null : 1
+  );
   const [selectedPresetId, setSelectedPresetId] = useState<string>("moonwell-weth-debt");
   const [selectedRiskProfile, setSelectedRiskProfile] = useState<RiskProfile>("moderate");
   const [selectedRiskBreakdownPreset, setSelectedRiskBreakdownPreset] = useState<VaultPreset | null>(null);
@@ -339,6 +342,9 @@ export function AppDemo() {
 
   // Recommendations internal sub-tab
   const [recommendationsSubTab, setRecommendationsSubTab] = useState<"advisor" | "breakdown">("advisor");
+  const [advisorNotifyChecked, setAdvisorNotifyChecked] = useState<boolean>(
+    () => localStorage.getItem("panik_advisor_notify") === "true"
+  );
 
   // Synchronize state values when active position changes
   useEffect(() => {
@@ -504,6 +510,17 @@ export function AppDemo() {
     setTimeout(() => setAlertSuccessMessage(null), 4000);
   };
 
+  const TOUR_STEPS = [
+    { step: 1, label: "Start here", body: "This is your Panik dashboard. Use the sidebar to navigate between tools." },
+    { step: 2, label: "Connect your wallet", body: "Link your wallet so Panik can read your live on-chain positions." },
+    { step: 3, label: "Open your first position in Compass", body: "Go to Compass to browse risk-scored positions matched to your profile." },
+  ];
+  const currentTourStep = TOUR_STEPS.find((s) => s.step === tooltipStep) ?? null;
+  const dismissTour = () => {
+    setTooltipStep(null);
+    localStorage.setItem("panik_tour_seen", "true");
+  };
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#0A0A0B] text-[#F0F4FF] font-sans antialiased text-sm">
       
@@ -513,9 +530,7 @@ export function AppDemo() {
         {/* Sidebar Header Brand block */}
         <div className="space-y-8">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-panik-orange/15 border border-panik-orange/30 flex items-center justify-center shadow-lg">
-              <ShieldCheck className="w-4.5 h-4.5 text-panik-orange" />
-            </div>
+            <img src="/panik-logo.png" alt="PANIK" width={32} height={32} style={{ objectFit: "contain" }} />
             <div className="flex flex-col">
               <span className="font-display font-extrabold text-lg tracking-widest text-white leading-none">PANIK</span>
               <span className="text-[8px] font-mono tracking-widest text-[#F0F4FF]/40 uppercase mt-0.5">SENTRY PROTECTION</span>
@@ -1184,6 +1199,21 @@ export function AppDemo() {
                   <p className="text-sm text-panik-text-secondary leading-relaxed font-sans max-w-md">
                     Our AI-powered guardrail recommendations, automated health rating models, and simulated action guides are currently undergoing extensive parameter audits on Base. Joining the waitlist guarantees early access to this feature upon release.
                   </p>
+
+                  <label className="mt-6 flex items-center gap-3 cursor-pointer select-none group">
+                    <input
+                      type="checkbox"
+                      checked={advisorNotifyChecked}
+                      onChange={(e) => {
+                        setAdvisorNotifyChecked(e.target.checked);
+                        localStorage.setItem("panik_advisor_notify", String(e.target.checked));
+                      }}
+                      className="w-4 h-4 rounded border border-white/20 bg-[#111318] accent-panik-orange cursor-pointer"
+                    />
+                    <span className="text-xs font-mono text-panik-text-secondary group-hover:text-white transition-colors">
+                      Notify me when Advisor goes live
+                    </span>
+                  </label>
                 </div>
               </motion.div>
             )}
@@ -1587,6 +1617,43 @@ export function AppDemo() {
         </AnimatePresence>
 
       </div>
+
+      {/* First-run onboarding tooltip tour */}
+      {currentTourStep && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] w-full max-w-sm px-4">
+          <div className="bg-[#111318] border border-panik-orange/30 rounded-xl p-4 shadow-2xl shadow-black/60">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-mono text-panik-orange uppercase tracking-widest font-bold">
+                Step {currentTourStep.step} of {TOUR_STEPS.length}
+              </span>
+              <button onClick={dismissTour} className="text-white/30 hover:text-white transition-colors text-[10px] font-mono uppercase cursor-pointer">
+                Skip tour
+              </button>
+            </div>
+            <p className="text-sm font-display font-semibold text-white mb-0.5">{currentTourStep.label}</p>
+            <p className="text-xs text-panik-text-secondary font-sans leading-relaxed mb-4">{currentTourStep.body}</p>
+            <div className="flex items-center justify-between">
+              <div className="flex gap-1">
+                {TOUR_STEPS.map((s) => (
+                  <span key={s.step} className={`h-1 w-6 rounded-full transition-colors ${s.step <= currentTourStep.step ? "bg-panik-orange" : "bg-white/10"}`} />
+                ))}
+              </div>
+              <button
+                onClick={() => {
+                  if (tooltipStep !== null && tooltipStep < TOUR_STEPS.length) {
+                    setTooltipStep(tooltipStep + 1);
+                  } else {
+                    dismissTour();
+                  }
+                }}
+                className="h-8 px-4 bg-panik-orange hover:bg-panik-orange/90 text-white font-mono text-[10px] uppercase tracking-wider rounded-lg cursor-pointer transition-colors"
+              >
+                {tooltipStep === TOUR_STEPS.length ? "Done" : "Next →"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
