@@ -1,0 +1,13 @@
+# Keep the deployment lean and the scoring core / research OFF Vercel.
+# (Vercel serves only the built `dist/` anyway — these are never web-served —
+#  but excluding them keeps the upload small and the core source off the host.)
+scripts/
+docs/
+supabase/
+Progress/
+packages/scoring/tests/
+README.md
+cspell.json
+*.log
+.env*
+!.env.example
