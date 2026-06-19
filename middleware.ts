@@ -1,28 +1,23 @@
 /**
- * Edge auth gate — makes the whole Vercel deployment "private link only".
+ * Edge auth gate — protects /app (panik-core) and /api routes only.
  *
- * Every request must pass HTTP Basic Auth; the credentials live in Vercel env
- * vars (BASIC_AUTH_USER / BASIC_AUTH_PASS), never in the client bundle. The
- * "private link" is the deployment URL + the shared password your team holds.
- *
- * Runs at the edge before any static asset is served, so nothing — not the
- * landing page, the app, or any file — is reachable without the password.
- * The scoring core never ships to the browser regardless (it lives behind the
- * /api backend), so this only gates the public surface.
+ * The landing page + waitlist (/) is PUBLIC so anyone can sign up.
+ * The product app (/app) and backend API (/api) require HTTP Basic Auth;
+ * credentials live in Vercel env vars (BASIC_AUTH_USER / BASIC_AUTH_PASS).
  *
  * Set in Vercel → Project → Settings → Environment Variables:
  *   BASIC_AUTH_USER, BASIC_AUTH_PASS
  */
 export const config = {
-  // Gate everything except Vercel internals.
-  matcher: "/((?!_vercel|_next/static|favicon.ico).*)",
+  // Only gate /app and /api routes — landing page is public.
+  matcher: ["/app/:path*", "/api/:path*"],
 };
 
 export default function middleware(req: Request): Response | undefined {
   const USER = process.env.BASIC_AUTH_USER;
   const PASS = process.env.BASIC_AUTH_PASS;
 
-  // Fail closed: if the gate isn't configured yet, do NOT serve the site.
+  // Fail closed: if the gate isn't configured yet, block protected routes.
   if (!USER || !PASS) {
     return new Response(
       "Access control not configured. Set BASIC_AUTH_USER and BASIC_AUTH_PASS in Vercel env vars.",
@@ -34,7 +29,7 @@ export default function middleware(req: Request): Response | undefined {
   if (header.startsWith("Basic ")) {
     try {
       const [user, pass] = atob(header.slice(6)).split(":");
-      if (user === USER && pass === PASS) return; // authorized → continue to the site
+      if (user === USER && pass === PASS) return; // authorized → continue
     } catch {
       /* malformed header → fall through to 401 */
     }
