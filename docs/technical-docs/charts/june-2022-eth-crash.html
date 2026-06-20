@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>PANIK — June 2022 ETH Crash</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0c0e14;color:#e2e8f0;font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:900px;margin:0 auto;padding:48px 24px 80px}
+  .nav{display:flex;align-items:center;gap:16px;margin-bottom:40px}
+  .nav a{color:#64748b;text-decoration:none;font-size:13px;letter-spacing:.05em}
+  .nav a:hover{color:#e2e8f0}
+  .nav span{color:#1e2535;font-size:13px}
+  .badge{display:inline-block;padding:4px 12px;background:#f97316/10;border:1px solid #f97316/30;border-radius:100px;color:#f97316;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:16px;background:rgba(249,115,22,.08);border-color:rgba(249,115,22,.25)}
+  h1{font-size:clamp(26px,5vw,38px);font-weight:700;letter-spacing:-.02em;line-height:1.2;margin-bottom:12px}
+  .date{color:#64748b;font-size:14px;margin-bottom:20px}
+  .intro{color:#94a3b8;font-size:16px;line-height:1.75;max-width:700px;margin-bottom:36px;border-left:3px solid rgba(249,115,22,.4);padding-left:18px}
+  .kpi-row{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:48px}
+  .kpi{background:#131720;border:1px solid #1e2535;border-radius:12px;padding:18px 22px;flex:1;min-width:130px}
+  .kpi .num{font-size:28px;font-weight:700;color:#f97316;line-height:1;margin-bottom:3px}
+  .kpi .lbl{font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:.08em}
+  .chart-card{background:#131720;border:1px solid #1e2535;border-radius:16px;padding:28px;margin-bottom:24px}
+  .chart-card h2{font-size:18px;font-weight:700;margin-bottom:6px;letter-spacing:-.01em}
+  .chart-card .sub{color:#64748b;font-size:13px;margin-bottom:24px;line-height:1.5}
+  .chart-wrap{position:relative;height:280px}
+  .takeaway{background:rgba(249,115,22,.06);border:1px solid rgba(249,115,22,.2);border-radius:12px;padding:20px 24px;margin-top:32px}
+  .takeaway h3{font-size:14px;font-weight:700;color:#f97316;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
+  .takeaway p{color:#cbd5e1;font-size:15px;line-height:1.7}
+  .legend-manual{display:flex;gap:20px;flex-wrap:wrap;margin-top:12px}
+  .legend-item{display:flex;align-items:center;gap:7px;font-size:13px;color:#94a3b8}
+  .legend-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+  footer{margin-top:56px;padding-top:24px;border-top:1px solid #1e2535;font-size:13px;color:#475569}
+  footer a{color:#64748b;text-decoration:none}
+  footer a:hover{color:#94a3b8}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="nav">
+    <a href="index.html">← All Events</a>
+    <span>·</span>
+    <a href="ust-luna-2022.html">Next: UST/LUNA →</a>
+  </nav>
+
+  <div class="badge">Event 01 · June 2022</div>
+  <h1>ETH / stETH Crash</h1>
+  <div class="date">June 9–18, 2022 · Aave V2 Ethereum · 1,970 wallets affected</div>
+  <p class="intro">ETH lost 40% of its value in just 9 days. Thousands of people using ETH as collateral for loans were automatically liquidated — their collateral sold off at the worst possible moment. PANIK was designed precisely to prevent this. Here's how it performed when replayed against the real data.</p>
+
+  <div class="kpi-row">
+    <div class="kpi"><div class="num">$143M</div><div class="lbl">Debt liquidated</div></div>
+    <div class="kpi"><div class="num">1,970</div><div class="lbl">Wallets hit</div></div>
+    <div class="kpi"><div class="num">5,551</div><div class="lbl">Liquidation events</div></div>
+    <div class="kpi"><div class="num">$40M</div><div class="lbl">Largest single position</div></div>
+  </div>
+
+  <!-- Chart 1: Health Factor Timeline -->
+  <div class="chart-card">
+    <h2>How early would PANIK have warned you?</h2>
+    <p class="sub">This shows a typical position's "health" declining as ETH crashed. A health score of 1.0 means you get liquidated. The key question: how many hours before that point would you have received a CRITICAL warning?</p>
+    <div class="chart-wrap">
+      <canvas id="c1"></canvas>
+    </div>
+    <div class="legend-manual" style="margin-top:16px">
+      <div class="legend-item"><div class="legend-dot" style="background:#f97316"></div>Position health (lower = more danger)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#22d3ee"></div>PANIK CRITICAL warning (44 hrs early)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#94a3b8"></div>Old static alarm (17 hrs early)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div>Liquidation (position wiped)</div>
+    </div>
+  </div>
+
+  <!-- Chart 2: Warning Time Comparison -->
+  <div class="chart-card">
+    <h2>Old system vs PANIK: hours of warning before liquidation</h2>
+    <p class="sub">More time = more options. With 44 hours of warning you can calmly add collateral, partially repay the loan, or exit at a reasonable price. With 17 hours — especially overnight — many people simply miss the window entirely.</p>
+    <div class="chart-wrap" style="height:240px">
+      <canvas id="c2"></canvas>
+    </div>
+  </div>
+
+  <div class="takeaway">
+    <h3>Bottom line</h3>
+    <p>In the biggest ETH crash on record, PANIK caught <strong>88 out of 100</strong> positions that were heading for liquidation — and delivered warnings a median of <strong>44 hours early</strong> instead of 17. The $40M whale that made headlines got only 17 hours under the old system. With PANIK, that position would have received its warning 44 hours out. About <strong>27 out of 100 warnings</strong> went to positions that ultimately survived — in a crash that severe, being close to the edge is genuinely dangerous even if you pull through.</p>
+  </div>
+
+  <footer>
+    <p>Data: 19 real WETH-collateral positions liquidated in Jun-2022 (≥$200k debt) + 560-wallet confusion matrix (400 liquidated + 160 survivors). Exact HF via <code>LendingPool.getUserAccountData()</code> at historical blocks. Dune queries 7731514, 7731537. Engine: <code>packages/scoring/src/computeScore.ts</code>. Full methodology: <a href="../BACKTEST_METHODOLOGY.md">BACKTEST_METHODOLOGY.md</a>.</p>
+  </footer>
+</div>
+
+<script>
+Chart.defaults.color = '#64748b';
+Chart.defaults.borderColor = '#1e2535';
+Chart.defaults.font.family = '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif';
+
+// Chart 1: Health Factor timeline
+// Hours before liquidation (0 = liquidation moment)
+// HF derived from: crash-regime fires at HF=1.25 (44h before liq), static floor at HF=1.10 (17h before liq)
+const hoursBeforeLiq = [-96, -80, -60, -44, -36, -27, -17, -8, 0];
+const labels1 = hoursBeforeLiq.map(h => h === 0 ? 'Liquidated' : `${Math.abs(h)}h before`);
+const hfData = [1.60, 1.50, 1.40, 1.25, 1.18, 1.13, 1.10, 1.04, 1.00];
+
+// Point colors: orange at index 3 (PANIK warning), gray at index 6 (static floor), red at index 8 (liq)
+const pointColors = hfData.map((_, i) => {
+  if (i === 3) return '#22d3ee';   // PANIK warning
+  if (i === 6) return '#94a3b8';   // static floor
+  if (i === 8) return '#ef4444';   // liquidation
+  return 'transparent';
+});
+const pointSizes = hfData.map((_, i) => [3,6,8].includes(i) ? 10 : (i === 0 ? 4 : 4));
+
+new Chart(document.getElementById('c1'), {
+  type: 'line',
+  data: {
+    labels: labels1,
+    datasets: [{
+      label: 'Health score',
+      data: hfData,
+      borderColor: '#f97316',
+      backgroundColor: 'rgba(249,115,22,.08)',
+      borderWidth: 2.5,
+      fill: true,
+      tension: 0.35,
+      pointRadius: hfData.map((_, i) => [3,6,8].includes(i) ? 9 : 3),
+      pointBackgroundColor: pointColors,
+      pointBorderColor: pointColors,
+      pointBorderWidth: 2,
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: ctx => {
+            const hf = ctx.parsed.y.toFixed(2);
+            const idx = ctx.dataIndex;
+            let note = '';
+            if (idx === 3) note = ' ← PANIK warns CRITICAL';
+            if (idx === 6) note = ' ← Old system warns';
+            if (idx === 8) note = ' ← Position liquidated';
+            return `Health: ${hf}${note}`;
+          }
+        },
+        backgroundColor: '#1e2535',
+        borderColor: '#334155',
+        borderWidth: 1,
+        titleColor: '#e2e8f0',
+        bodyColor: '#94a3b8',
+        padding: 10,
+      },
+      annotation: {}
+    },
+    scales: {
+      x: {
+        grid: { color: '#131720' },
+        ticks: { font: { size: 12 }, maxRotation: 30 }
+      },
+      y: {
+        min: 0.95,
+        max: 1.75,
+        grid: { color: '#1e2535' },
+        ticks: {
+          font: { size: 12 },
+          callback: v => {
+            if (v === 1.00) return '💀 1.00 (liquidation)';
+            if (v === 1.25) return '1.25 (PANIK alarm)';
+            if (v === 1.10) return '1.10 (old alarm)';
+            return v.toFixed(2);
+          }
+        },
+        title: { display: true, text: 'Health Score', color: '#64748b', font: { size: 12 } }
+      }
+    }
+  }
+});
+
+// Chart 2: Warning time comparison
+new Chart(document.getElementById('c2'), {
+  type: 'bar',
+  data: {
+    labels: ['Old system (static floor)', 'PANIK (crash-regime)'],
+    datasets: [{
+      label: 'Hours of warning before liquidation',
+      data: [17, 44],
+      backgroundColor: ['rgba(100,116,139,.35)', 'rgba(249,115,22,.75)'],
+      borderColor: ['#475569', '#f97316'],
+      borderWidth: 1.5,
+      borderRadius: 8,
+    }]
+  },
+  options: {
+    indexAxis: 'y',
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: { label: ctx => ` ${ctx.parsed.x} hours of warning` },
+        backgroundColor: '#1e2535',
+        borderColor: '#334155',
+        borderWidth: 1,
+        titleColor: '#e2e8f0',
+        bodyColor: '#94a3b8',
+        padding: 10,
+      }
+    },
+    scales: {
+      x: {
+        max: 55,
+        grid: { color: '#1e2535' },
+        ticks: { callback: v => `${v}h`, font: { size: 13 } },
+        title: { display: true, text: 'Hours of warning before your position is liquidated', color: '#64748b', font: { size: 12 } }
+      },
+      y: {
+        grid: { display: false },
+        ticks: { font: { size: 13, weight: '500' } }
+      }
+    }
+  }
+});
+</script>
+</body>
+</html>

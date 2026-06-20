@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>PANIK — Base Protocols, Aug 2024</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0c0e14;color:#e2e8f0;font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:900px;margin:0 auto;padding:48px 24px 80px}
+  .nav{display:flex;align-items:center;gap:16px;margin-bottom:40px;flex-wrap:wrap}
+  .nav a{color:#64748b;text-decoration:none;font-size:13px;letter-spacing:.05em}
+  .nav a:hover{color:#e2e8f0}
+  .nav span{color:#1e2535;font-size:13px}
+  .badge{display:inline-block;padding:4px 12px;border-radius:100px;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:16px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);color:#22c55e}
+  h1{font-size:clamp(26px,5vw,38px);font-weight:700;letter-spacing:-.02em;line-height:1.2;margin-bottom:12px}
+  .date{color:#64748b;font-size:14px;margin-bottom:20px}
+  .intro{color:#94a3b8;font-size:16px;line-height:1.75;max-width:700px;margin-bottom:36px;border-left:3px solid rgba(34,197,94,.4);padding-left:18px}
+  .kpi-row{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:48px}
+  .kpi{background:#131720;border:1px solid #1e2535;border-radius:12px;padding:18px 22px;flex:1;min-width:130px}
+  .kpi .num{font-size:28px;font-weight:700;color:#22c55e;line-height:1;margin-bottom:3px}
+  .kpi .lbl{font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:.08em}
+  .chart-card{background:#131720;border:1px solid #1e2535;border-radius:16px;padding:28px;margin-bottom:24px}
+  .chart-card h2{font-size:18px;font-weight:700;margin-bottom:6px;letter-spacing:-.01em}
+  .chart-card .sub{color:#64748b;font-size:13px;margin-bottom:24px;line-height:1.5}
+  .chart-wrap{position:relative;height:280px}
+  .protocol-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px;margin-top:24px}
+  .proto-card{background:#0e1118;border:1px solid #1e2535;border-radius:12px;padding:18px 20px}
+  .proto-card .name{font-size:13px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-bottom:10px}
+  .proto-card .big{font-size:30px;font-weight:700;line-height:1;margin-bottom:4px}
+  .proto-card .detail{font-size:12px;color:#64748b}
+  .proto-card.aave .name{color:#a78bfa} .proto-card.aave .big{color:#a78bfa}
+  .proto-card.moonwell .name{color:#f97316} .proto-card.moonwell .big{color:#f97316}
+  .proto-card.morpho .name{color:#22d3ee} .proto-card.morpho .big{color:#22d3ee}
+  .proto-card.compound .name{color:#22c55e} .proto-card.compound .big{color:#22c55e}
+  .takeaway{background:rgba(34,197,94,.05);border:1px solid rgba(34,197,94,.2);border-radius:12px;padding:20px 24px;margin-top:32px}
+  .takeaway h3{font-size:14px;font-weight:700;color:#22c55e;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
+  .takeaway p{color:#cbd5e1;font-size:15px;line-height:1.7}
+  .note-box{background:#131720;border:1px solid #1e2535;border-radius:10px;padding:16px 20px;margin-top:16px;font-size:13px;color:#64748b;line-height:1.6}
+  .note-box strong{color:#94a3b8}
+  footer{margin-top:56px;padding-top:24px;border-top:1px solid #1e2535;font-size:13px;color:#475569}
+  footer a{color:#64748b;text-decoration:none}
+  footer a:hover{color:#94a3b8}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="nav">
+    <a href="index.html">← All Events</a>
+    <span>·</span>
+    <a href="usdc-depeg-2023.html">← USDC Depeg</a>
+  </nav>
+
+  <div class="badge">Event 05 · August 2024 · Base Chain</div>
+  <h1>Yen Carry Trade Unwind</h1>
+  <div class="date">August 5, 2024 · Base Chain · Aave V3 + Moonwell + Morpho Blue + Compound III</div>
+  <p class="intro">On August 5, 2024, the Bank of Japan unexpectedly raised interest rates. Traders who had borrowed cheaply in yen to buy crypto were forced to unwind their positions all at once — triggering a global flash crash. ETH dropped ~23% in a single day. This was the first major crash that hit PANIK's home network, Base, and it tested all four DeFi protocols PANIK monitors.</p>
+
+  <div class="kpi-row">
+    <div class="kpi"><div class="num">6,051</div><div class="lbl">Wallets tested</div></div>
+    <div class="kpi"><div class="num">4</div><div class="lbl">Protocols covered</div></div>
+    <div class="kpi"><div class="num">92–100%</div><div class="lbl">Recall range</div></div>
+    <div class="kpi"><div class="num">12–33h</div><div class="lbl">Advance warning</div></div>
+  </div>
+
+  <!-- Chart 1: Lead time by protocol -->
+  <div class="chart-card">
+    <h2>How many hours of warning did each protocol's users get?</h2>
+    <p class="sub">PANIK monitors four different DeFi lending protocols on Base. Each one had slightly different loan structures, but all received meaningful advance warning — ranging from 12 to 33 hours before liquidations happened. That's the window to act: add collateral, repay some debt, or exit.</p>
+    <div class="chart-wrap" style="height:260px">
+      <canvas id="c1"></canvas>
+    </div>
+  </div>
+
+  <!-- Chart 2: Per-protocol recall -->
+  <div class="chart-card">
+    <h2>Did PANIK catch every at-risk position across all four protocols?</h2>
+    <p class="sub">Aave V3 was validated with a full survivor analysis (comparing flagged vs unflagged positions for both liquidated AND surviving borrowers). The other three were validated for recall — confirming every liquidated position received a CRITICAL warning before it happened.</p>
+    <div class="chart-wrap" style="height:260px">
+      <canvas id="c2"></canvas>
+    </div>
+
+    <div class="protocol-grid">
+      <div class="proto-card aave">
+        <div class="name">Aave V3</div>
+        <div class="big">92%</div>
+        <div class="detail">recall · 24% false-alarm<br>2,068 wallets · full matrix</div>
+      </div>
+      <div class="proto-card moonwell">
+        <div class="name">Moonwell</div>
+        <div class="big">100%</div>
+        <div class="detail">recall · 33h median warning<br>564 liquidations</div>
+      </div>
+      <div class="proto-card morpho">
+        <div class="name">Morpho Blue</div>
+        <div class="big">100%</div>
+        <div class="detail">recall · 12h median warning<br>192 liquidations</div>
+      </div>
+      <div class="proto-card compound">
+        <div class="name">Compound III</div>
+        <div class="big">100%</div>
+        <div class="detail">recall · 18h median warning<br>117 liquidations</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="takeaway">
+    <h3>Bottom line</h3>
+    <p>This was the proving ground for PANIK on its home network. Across 6,051 tested wallets and four different DeFi protocols, PANIK's engine generalized cleanly — no protocol-specific tuning was needed. The crash was an intraday flash (ETH crashed and partly recovered the same day), so the crash-regime booster didn't activate (ETH's 30-day volatility score peaked at 52, just below the ≥60 threshold). The <strong>static health-factor floor alone delivered 12–33 hours of warning</strong> across all protocols. That's PANIK's baseline protection working exactly as intended.</p>
+  </div>
+
+  <div class="note-box">
+    <strong>What's the difference between 92% and 100%?</strong> The 92% on Aave V3 comes from a stricter test — we checked both liquidated AND surviving positions, measuring how often PANIK warned unnecessarily (false-alarms). The 100% on the other three protocols measures recall only (did every liquidated position get flagged?). A position that reaches HF=1.0 will always trip the floor — so 100% recall for liquidated positions is expected. The more honest number that includes survivors (false-alarm rate) is only available for Aave V3 so far.
+  </div>
+
+  <footer>
+    <p>Data: Aave V3 Base — exact HF via <code>getUserAccountData()</code> on Base pool (2,068 wallets). Moonwell, Morpho, Compound III — price-walk method (collateral price / price at liquidation). Dune query 7748861 (Base liquidations). Scripts: <code>fetch-survivors-base.mjs</code>, <code>survivor-matrix-base.ts</code>, <code>price-walk.ts</code>. Full methodology: <a href="../BACKTEST_METHODOLOGY.md">BACKTEST_METHODOLOGY.md</a>.</p>
+  </footer>
+</div>
+
+<script>
+Chart.defaults.color = '#64748b';
+Chart.defaults.borderColor = '#1e2535';
+Chart.defaults.font.family = '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif';
+
+const protocols = ['Compound III', 'Morpho Blue', 'Aave V3\n(estimated)', 'Moonwell'];
+const colors = {
+  compound: { bg: 'rgba(34,197,94,.65)', border: '#16a34a' },
+  morpho:   { bg: 'rgba(34,211,238,.65)', border: '#06b6d4' },
+  aave:     { bg: 'rgba(167,139,250,.65)', border: '#7c3aed' },
+  moonwell: { bg: 'rgba(249,115,22,.65)', border: '#ea580c' },
+};
+
+// Chart 1: Lead time by protocol
+new Chart(document.getElementById('c1'), {
+  type: 'bar',
+  data: {
+    labels: ['Morpho Blue', 'Compound III', 'Aave V3', 'Moonwell'],
+    datasets: [{
+      label: 'Median hours of warning before liquidation',
+      data: [12, 18, 22, 33],
+      backgroundColor: [
+        colors.morpho.bg, colors.compound.bg, colors.aave.bg, colors.moonwell.bg
+      ],
+      borderColor: [
+        colors.morpho.border, colors.compound.border, colors.aave.border, colors.moonwell.border
+      ],
+      borderWidth: 1.5,
+      borderRadius: 8,
+    }]
+  },
+  options: {
+    indexAxis: 'y',
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: { label: ctx => ` ${ctx.parsed.x} hours of warning before liquidation` },
+        backgroundColor: '#1e2535',
+        borderColor: '#334155',
+        borderWidth: 1,
+        titleColor: '#e2e8f0',
+        bodyColor: '#94a3b8',
+        padding: 10,
+      }
+    },
+    scales: {
+      x: {
+        max: 42,
+        grid: { color: '#1e2535' },
+        ticks: { callback: v => `${v}h`, font: { size: 13 } },
+        title: { display: true, text: 'Median hours of CRITICAL warning before your position is liquidated', color: '#64748b', font: { size: 12 } }
+      },
+      y: { grid: { display: false }, ticks: { font: { size: 13, weight: '500' } } }
+    }
+  }
+});
+
+// Chart 2: Recall by protocol
+new Chart(document.getElementById('c2'), {
+  type: 'bar',
+  data: {
+    labels: ['Morpho Blue', 'Compound III', 'Moonwell', 'Aave V3\n(full survivor test)'],
+    datasets: [{
+      label: '% of at-risk positions that received a CRITICAL warning',
+      data: [100, 100, 100, 92],
+      backgroundColor: [
+        colors.morpho.bg, colors.compound.bg, colors.moonwell.bg, colors.aave.bg
+      ],
+      borderColor: [
+        colors.morpho.border, colors.compound.border, colors.moonwell.border, colors.aave.border
+      ],
+      borderWidth: 1.5,
+      borderRadius: 8,
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: { label: ctx => ` ${ctx.parsed.y}% of liquidated positions were warned in advance` },
+        backgroundColor: '#1e2535',
+        borderColor: '#334155',
+        borderWidth: 1,
+        titleColor: '#e2e8f0',
+        bodyColor: '#94a3b8',
+        padding: 10,
+      }
+    },
+    scales: {
+      x: { grid: { color: '#131720' }, ticks: { font: { size: 12 } } },
+      y: {
+        min: 80,
+        max: 105,
+        grid: { color: '#1e2535' },
+        ticks: { callback: v => `${v}%`, font: { size: 13 } },
+        title: { display: true, text: 'Recall (% of doomed positions caught early)', color: '#64748b', font: { size: 12 } }
+      }
+    }
+  }
+});
+</script>
+</body>
+</html>
