@@ -22,3 +22,10 @@ export { CoinGeckoProvider } from "./providers/coingecko";
 export { DefiLlamaProvider } from "./providers/defillama";
 export * from "./providers/chainlink";
 export { TtlCache } from "./providers/cache";
+export { DuneHistoryProvider, PANIK_FEATURES_QUERY_ID, EMPTY_FEATURES } from "./providers/duneHistory";
+export { OpenRouterNarrator, fallbackNarration, type ProfileNarration } from "./providers/narrator";
+// DeFi-persona classifier (deterministic) — see docs/technical-docs/WALLET_PROFILER.md
+export * from "./classify/types";
+export * from "./classify/params";
+export { classifyWallet, emergingProtocols } from "./classify/classifyWallet";
+export { profileWallet, type WalletProfile } from "./classify/profileWallet";
