@@ -6,7 +6,7 @@
  */
 
 import React from "react";
-import { Activity, RadioTower, WifiOff } from "lucide-react";
+import { Activity, WifiOff } from "lucide-react";
 import type { LiveWalletPosition } from "../lib/live";
 import { ProtocolLogo } from "./ProtocolLogo";
 
@@ -51,11 +51,7 @@ export function LivePositions({ positions, updatedAt, offline }: LivePositionsPr
 
   return (
     <div className="bg-white/[0.01] border border-panik-orange/20 rounded-2xl p-5.5">
-      <h3 className="text-sm font-mono tracking-widest text-[#748BAA] font-bold uppercase mb-4 flex items-center justify-between">
-        <span className="flex items-center gap-2">
-          <RadioTower className="w-4 h-4 text-panik-orange animate-pulse" />
-          <span>Live positions — Base mainnet</span>
-        </span>
+      <h3 className="text-sm font-mono tracking-widest text-[#748BAA] font-bold uppercase mb-4 flex items-center justify-end">
         <span className="text-[10px] text-panik-orange font-normal flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
           {positions === null

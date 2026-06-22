@@ -105,6 +105,7 @@ interface Answers {
   q3: string[]; q4: string[];
 }
 const EMPTY: Answers = { q1: null, q2: null, q5: null, q3: [], q4: [] };
+const DRAFT_KEY = "panik_waitlist_draft";
 
 interface WaitlistModalProps {
   isOpen: boolean;
@@ -134,15 +135,52 @@ export function WaitlistModal({ isOpen, onClose, onJoinSuccess, initialEmail = "
   const [submitError, setSubmitError] = useState("");
   const [position, setPosition] = useState<number | null>(null);
 
+  // Q4 max-selection inline feedback
+  const [capMsg, setCapMsg] = useState(false);
+
+  // On open: restore in-progress draft or start fresh. Always reset transient states.
   useEffect(() => {
-    if (isOpen) {
-      setStep(1); setQIndex(0);
-      setEmail(initialEmail); setEmailError("");
-      setAnswers(EMPTY); setNotes(""); setHoneypot("");
-      setWallet(""); setWalletError(""); setConnectingWallet(null); setShowManualInput(false);
-      setSubmitting(false); setSubmitError(""); setPosition(null);
+    if (!isOpen) return;
+    setEmailError(""); setHoneypot(""); setCapMsg(false);
+    setWallet(""); setWalletError(""); setConnectingWallet(null); setShowManualInput(false);
+    setSubmitting(false); setSubmitError(""); setPosition(null);
+    const saved = sessionStorage.getItem(DRAFT_KEY);
+    if (saved) {
+      try {
+        const d = JSON.parse(saved);
+        setStep(d.step ?? 1); setQIndex(d.qIndex ?? 0);
+        setEmail(d.email ?? initialEmail);
+        setAnswers({ ...EMPTY, ...(d.answers ?? {}) });
+        setNotes(d.notes ?? "");
+        return;
+      } catch { /* fall through to fresh start */ }
     }
+    setStep(1); setQIndex(0);
+    setEmail(initialEmail); setAnswers(EMPTY); setNotes("");
   }, [isOpen, initialEmail]);
+
+  // Continuously persist draft while modal is open (not after success).
+  useEffect(() => {
+    if (!isOpen || step === 5) return;
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ step, qIndex, email, answers, notes }));
+  }, [isOpen, step, qIndex, email, answers, notes]);
+
+  // Clear cap message when user moves to a different question.
+  useEffect(() => { setCapMsg(false); }, [qIndex]);
+
+  // ESC key closes the modal (same guard as the backdrop click).
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if ((step >= 2 || (step === 1 && email.trim())) && step < 5) {
+        if (!window.confirm("Leave the waitlist signup? Your progress is saved for this session.")) return;
+      }
+      onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, step, onClose]);
 
   if (!isOpen) return null;
 
@@ -162,7 +200,10 @@ export function WaitlistModal({ isOpen, onClose, onJoinSuccess, initialEmail = "
   };
 
   const q = QUESTIONS[qIndex];
-  const selectSingle = (id: "q1" | "q2" | "q5", key: string) => setAnswers((a) => ({ ...a, [id]: key }));
+  const selectSingle = (id: "q1" | "q2" | "q5", key: string) => {
+    setAnswers((a) => ({ ...a, [id]: key }));
+    if (qIndex < QUESTIONS.length - 1) setTimeout(() => setQIndex((prev) => prev + 1), 350);
+  };
   const toggleMulti = (id: "q3" | "q4", key: string, max?: number) =>
     setAnswers((a) => {
       const cur = a[id];
@@ -185,19 +226,33 @@ export function WaitlistModal({ isOpen, onClose, onJoinSuccess, initialEmail = "
 
   const handleConnect = async (rdns: WalletRdns) => {
     setWalletError(""); setConnectingWallet(rdns);
+    const timeoutId = setTimeout(() => {
+      setConnectingWallet(null);
+      setWalletError("Connection timed out. Try again or paste your address below.");
+    }, 30_000);
     try {
       setWallet(await connectWallet(rdns));
     } catch (err) {
       setWalletError(err instanceof Error ? err.message : "Wallet connection failed");
     } finally {
+      clearTimeout(timeoutId);
       setConnectingWallet(null);
     }
   };
 
   const quizComplete = Boolean(answers.q1 && answers.q2 && answers.q5);
 
+  const mapSubmitError = (error: string | undefined): string => {
+    if (!error) return "Something went wrong. Please try again.";
+    if (error === "config_missing") return "Signup is not configured yet. Please try again later.";
+    if (error === "network") return "Connection failed. Please check your internet and retry.";
+    if (error.includes("23505") || error.includes("http_409") || error.includes("duplicate"))
+      return "This email is already registered.";
+    return "Something went wrong. Please try again.";
+  };
+
   const handleSubmit = async () => {
-    if (!isValidEvmAddress(wallet)) { setWalletError("Enter a valid EVM address (0x + 40 hex)"); return; }
+    if (!isValidEvmAddress(wallet)) { setWalletError("Enter a valid EVM address (0x + 40 hex chars) to continue."); return; }
     if (!quizComplete || submitting) return;
     setSubmitting(true); setSubmitError("");
     const result = await submitSignup({
@@ -213,21 +268,25 @@ export function WaitlistModal({ isOpen, onClose, onJoinSuccess, initialEmail = "
     });
     setSubmitting(false);
     if (!result.ok) {
-      setSubmitError(result.error === "config_missing"
-        ? "Signup is not configured yet. Please try again later."
-        : "Something went wrong. Please check your connection and retry.");
+      setSubmitError(mapSubmitError(result.error));
       return;
     }
     setPosition(result.position ?? null);
     onJoinSuccess(email.trim(), appetite ? `${APPETITE_LABEL[appetite]} profile` : "Waitlist");
     setStep(5);
+    sessionStorage.removeItem(DRAFT_KEY);
   };
 
-  const pct = Math.round(((step - 1) / 4) * 100);
+  const pct = Math.round((step / 4) * 100);
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 overflow-y-auto">
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="absolute inset-0 bg-black/75 backdrop-blur-md" />
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => {
+        if ((step >= 2 || (step === 1 && email.trim())) && step < 5) {
+          if (!window.confirm("Leave the waitlist signup? Your progress is saved for this session.")) return;
+        }
+        onClose();
+      }} className="absolute inset-0 bg-black/75 backdrop-blur-md" />
 
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 15 }} animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -241,7 +300,7 @@ export function WaitlistModal({ isOpen, onClose, onJoinSuccess, initialEmail = "
         <div className="flex justify-between items-center mb-6 relative z-10">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-panik-orange animate-pulse" />
-            <span className="text-[10px] font-mono tracking-widest text-[#94A3B8] uppercase">RESERVE ONBOARDING INDEX</span>
+            <span className="text-[10px] font-mono tracking-widest text-[#94A3B8] uppercase">Early Access</span>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-md hover:bg-white/5 text-white/50 hover:text-white transition-all duration-200" aria-label="Close modal">
             <X className="w-5 h-5" />
@@ -253,7 +312,10 @@ export function WaitlistModal({ isOpen, onClose, onJoinSuccess, initialEmail = "
           <div className="mb-8 w-full">
             <div className="flex justify-between items-center text-[10px] font-mono text-white/40 mb-1.5 tracking-wider uppercase">
               <span>Waitlist Pipeline</span>
-              <span>Step {step} of 4 ({pct}%)</span>
+              <span>
+                Step {step} of 4 ({pct}%)
+                {step === 2 && <span className="text-white/25 ml-1.5 normal-case not-italic font-mono">· Q{qIndex + 1}/5</span>}
+              </span>
             </div>
             <div className="h-[2px] w-full bg-white/[0.05] rounded-full overflow-hidden">
               <motion.div className="h-full bg-panik-orange" initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.3 }} />
@@ -275,21 +337,22 @@ export function WaitlistModal({ isOpen, onClose, onJoinSuccess, initialEmail = "
                   Help us build the future of DeFi risk intelligence. Answer a few quick profiling questions to secure early access and reserve your queue slot.
                 </p>
               </div>
-              <form onSubmit={handleEmailNext} className="space-y-4">
+              <form noValidate onSubmit={handleEmailNext} className="space-y-4">
                 <div>
-                  <label htmlFor="modal-email-input" className="block text-[11px] font-mono tracking-wider text-white/50 uppercase mb-2">Enter email address</label>
+                  <label htmlFor="modal-email-input" className="block text-[11px] font-mono tracking-wider text-white/50 uppercase mb-2">{email ? "Email (saved)" : "Enter email address"}</label>
                   <div className="relative flex items-center">
                     <Mail className="absolute left-4 w-4.5 h-4.5 text-white/30" />
                     <input
                       type="email" id="modal-email-input" value={email} onChange={(e) => setEmail(e.target.value)}
-                      placeholder="you@company.com or web3 mail..."
+                      placeholder="you@company.com (or wallet email if applicable)"
+                      aria-describedby={emailError ? "email-error" : undefined}
                       className="w-full h-12 pl-12 pr-4 bg-[#111318] border border-white/[0.08] hover:border-white/18 focus:border-panik-orange/50 focus:ring-1 focus:ring-panik-orange/20 text-[#F0F4FF] placeholder-white/25 text-sm font-sans rounded-lg outline-none transition-all duration-300"
                       required
                     />
                   </div>
                   {emailError && (
-                    <p className="text-red-400 text-xs font-mono mt-2.5 flex items-center gap-1.5">
-                      <ShieldAlert className="w-3.5 h-3.5 shrink-0" /><span>{emailError}</span>
+                    <p id="email-error" role="alert" className="text-red-400 text-xs font-mono mt-2.5 flex items-center gap-1.5">
+                      <ShieldAlert aria-hidden="true" className="w-3.5 h-3.5 shrink-0" /><span>{emailError}</span>
                     </p>
                   )}
                 </div>
@@ -304,7 +367,7 @@ export function WaitlistModal({ isOpen, onClose, onJoinSuccess, initialEmail = "
           {step === 2 && (
             <motion.div key={`s2-${qIndex}`} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -15 }} transition={{ duration: 0.25 }} className="space-y-6 min-h-[360px] flex flex-col">
               <div className="flex justify-between items-center border-b border-white/[0.03] pb-3">
-                <span className="text-[10px] font-mono tracking-widest text-[#F97316] uppercase font-bold">User Profiling Evaluation</span>
+                <span className="text-[10px] font-mono tracking-widest text-[#F97316] uppercase font-bold">Building Your Risk Profile</span>
                 <span className="text-[10px] font-mono text-white/35">Question {qIndex + 1} of {QUESTIONS.length}</span>
               </div>
 
@@ -316,23 +379,33 @@ export function WaitlistModal({ isOpen, onClose, onJoinSuccess, initialEmail = "
               </div>
 
               <div className="flex-1">
-                <h3 className="font-display font-medium text-lg sm:text-xl text-white tracking-tight leading-snug mb-1">{q.text}</h3>
+                <h3 id={`q-heading-${q.id}`} className="font-display font-medium text-lg sm:text-xl text-white tracking-tight leading-snug mb-1">{q.text}</h3>
                 {q.hint && <p className="text-[11px] font-mono text-white/40 uppercase tracking-wider mb-4">{q.hint}</p>}
                 {!q.hint && <div className="mb-4" />}
 
-                <div className="space-y-2.5">
+                <div
+                  role={q.kind === "single" ? "radiogroup" : "group"}
+                  aria-labelledby={`q-heading-${q.id}`}
+                  className="space-y-2.5"
+                >
                   {q.options.map((o) => {
                     const selected = q.kind === "single" ? answers[q.id] === o.key : answers[q.id].includes(o.key);
                     const capped = q.kind === "multi" && !selected && answers[q.id].length >= (q.max ?? 99);
                     return (
                       <button
-                        key={o.key} type="button" disabled={capped}
-                        onClick={() => (q.kind === "single" ? selectSingle(q.id, o.key) : toggleMulti(q.id, o.key, q.max))}
+                        key={o.key} type="button"
+                        role={q.kind === "single" ? "radio" : "checkbox"}
+                        aria-checked={selected}
+                        onClick={() => {
+                          if (q.kind === "single") { selectSingle(q.id, o.key); }
+                          else if (capped) { setCapMsg(true); }
+                          else { setCapMsg(false); toggleMulti(q.id, o.key, q.max); }
+                        }}
                         className={`w-full text-left px-4 py-3.5 rounded-lg border flex items-center gap-3 transition-all duration-200 ${
                           selected ? "bg-panik-orange/[0.07] border-panik-orange/40 text-white" : "bg-[#111318] border-white/[0.06] hover:border-white/[0.16] text-white/75"
                         } ${capped ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
                       >
-                        <span className={`shrink-0 w-5 h-5 flex items-center justify-center border transition-colors ${q.kind === "multi" ? "rounded" : "rounded-full"} ${selected ? "bg-panik-orange border-panik-orange" : "border-white/25"}`}>
+                        <span aria-hidden="true" className={`shrink-0 w-5 h-5 flex items-center justify-center border transition-colors ${q.kind === "multi" ? "rounded" : "rounded-full"} ${selected ? "bg-panik-orange border-panik-orange" : "border-white/25"}`}>
                           {selected && <Check className="w-3 h-3 text-white stroke-[3]" />}
                         </span>
                         <span className="text-sm font-sans leading-snug">{o.label}</span>
@@ -340,6 +413,9 @@ export function WaitlistModal({ isOpen, onClose, onJoinSuccess, initialEmail = "
                     );
                   })}
                 </div>
+                {capMsg && q.kind === "multi" && q.max && (
+                  <p role="status" aria-live="polite" className="text-[10px] font-mono text-amber-400/80 mt-2.5">You can only select up to {q.max} options.</p>
+                )}
 
                 {/* optional notes appear on the last question */}
                 {qIndex === QUESTIONS.length - 1 && (
@@ -373,7 +449,7 @@ export function WaitlistModal({ isOpen, onClose, onJoinSuccess, initialEmail = "
                 <p className="text-panik-text-secondary text-sm mt-1">Review your answers before reserving your slot.</p>
               </div>
 
-              <div className="bg-[#111318]/80 border border-white/[0.06] rounded-xl overflow-hidden divide-y divide-white/[0.04] max-h-64 overflow-y-auto">
+              <div className="bg-[#111318]/80 border border-white/[0.06] rounded-xl overflow-hidden divide-y divide-white/[0.04]">
                 <div className="p-4 flex justify-between items-center text-xs">
                   <span className="font-mono text-white/40 uppercase">Email</span>
                   <span className="font-mono text-white font-semibold truncate max-w-[220px] sm:max-w-xs">{email}</span>
@@ -425,7 +501,7 @@ export function WaitlistModal({ isOpen, onClose, onJoinSuccess, initialEmail = "
               <div>
                 <h2 className="font-display font-medium text-2xl text-white tracking-tight leading-snug">Reserve Your Beta Access</h2>
                 <p className="text-panik-text-secondary text-sm font-sans mt-2 leading-relaxed">
-                  Required — your wallet lets us verify on-chain DeFi activity and tailor early access. No transaction, no signing.
+                  Connect your wallet to verify on-chain DeFi activity and tailor your early access. No transaction or signing required.
                 </p>
               </div>
 
@@ -452,7 +528,7 @@ export function WaitlistModal({ isOpen, onClose, onJoinSuccess, initialEmail = "
               )}
 
               <div className="text-center">
-                <button type="button" onClick={() => { setShowManualInput(!showManualInput); setWalletError(""); }} disabled={connectingWallet !== null} className="text-xs font-mono text-panik-orange hover:text-panik-orange/80 tracking-wider pb-0.5 border-b border-transparent hover:border-panik-orange/30 transition-all duration-200 uppercase cursor-pointer">
+                <button type="button" onClick={() => { if (showManualInput) setWallet(""); setShowManualInput(!showManualInput); setWalletError(""); }} disabled={connectingWallet !== null} className="text-xs font-mono text-panik-orange hover:text-panik-orange/80 tracking-wider pb-0.5 border-b border-transparent hover:border-panik-orange/30 transition-all duration-200 uppercase cursor-pointer">
                   {showManualInput ? "Use a browser wallet instead" : "…or paste a wallet address"}
                 </button>
               </div>
@@ -463,11 +539,11 @@ export function WaitlistModal({ isOpen, onClose, onJoinSuccess, initialEmail = "
                 </div>
               )}
               {walletError && (
-                <p className="text-red-400 text-xs font-mono flex items-center gap-1.5"><ShieldAlert className="w-3.5 h-3.5 shrink-0" /><span>{walletError}</span></p>
+                <p role="alert" className="text-red-400 text-xs font-mono flex items-center gap-1.5"><ShieldAlert aria-hidden="true" className="w-3.5 h-3.5 shrink-0" /><span>{walletError}</span></p>
               )}
               {submitError && (
-                <div className="p-3.5 rounded-lg bg-red-500/[0.06] border border-red-500/25 flex items-start gap-2.5 text-xs text-red-300 font-mono leading-relaxed">
-                  <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" /><span>{submitError}</span>
+                <div role="alert" className="p-3.5 rounded-lg bg-red-500/[0.06] border border-red-500/25 flex items-start gap-2.5 text-xs text-red-300 font-mono leading-relaxed">
+                  <ShieldAlert aria-hidden="true" className="w-4 h-4 shrink-0 mt-0.5" /><span>{submitError}</span>
                 </div>
               )}
 
@@ -480,14 +556,11 @@ export function WaitlistModal({ isOpen, onClose, onJoinSuccess, initialEmail = "
                 <button type="button" onClick={() => setStep(3)} disabled={submitting} className="text-xs font-mono text-white/45 hover:text-white transition-colors uppercase h-10 px-4 rounded hover:bg-white/[0.02] flex items-center gap-1 disabled:opacity-40">
                   <ChevronLeft className="w-4 h-4" /><span>Back</span>
                 </button>
-                <button type="button" onClick={handleSubmit} disabled={submitting || !isValidEvmAddress(wallet) || !quizComplete}
+                <button type="button" onClick={handleSubmit} disabled={submitting || !quizComplete || !isValidEvmAddress(wallet)}
                   className="h-12 px-7 bg-panik-orange hover:bg-panik-orange/90 disabled:opacity-50 text-white font-mono text-xs uppercase tracking-wider font-bold rounded-lg flex items-center gap-2 cursor-pointer transition-all active:scale-[0.99]">
                   {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /><span>Submitting…</span></> : <><span>{submitError ? "Retry" : "Join the waitlist"}</span><ArrowRight className="w-4 h-4" /></>}
                 </button>
               </div>
-              {!waitlistConfigured && (
-                <p className="text-[10px] font-mono text-amber-400/70 flex items-center gap-1.5"><Info className="w-3 h-3" /> Backend env not set — submit disabled until VITE_SUPABASE_* is configured.</p>
-              )}
             </motion.div>
           )}
 
@@ -503,7 +576,7 @@ export function WaitlistModal({ isOpen, onClose, onJoinSuccess, initialEmail = "
               <div className="space-y-2">
                 <h2 className="font-display font-medium text-2xl sm:text-3xl text-white tracking-tight">You're on the list.</h2>
                 <p className="text-panik-text-secondary text-sm max-w-sm mx-auto leading-relaxed">
-                  {position ? <>Your position is <span className="text-white font-semibold">#{position}</span>. </> : null}
+                  {position ? <>Your position is <span className="text-white font-semibold">#{position}</span>.</> : <>Your slot is confirmed.</>}{" "}
                   We'll contact you when Panik enters beta and new testing opportunities open.
                 </p>
               </div>
@@ -518,12 +591,12 @@ export function WaitlistModal({ isOpen, onClose, onJoinSuccess, initialEmail = "
                 </div>
                 <div className="flex items-center gap-2.5 text-white/80">
                   <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-[9px]">✓</span>
-                  <span>Wallet linked ({wallet.slice(0, 6)}…{wallet.slice(-4)})</span>
+                  <span>Wallet verified ({wallet.slice(0, 6)}…{wallet.slice(-4)})</span>
                 </div>
               </div>
               <div className="space-y-3 pt-2">
                 <button type="button" onClick={onClose} className="w-full h-11 bg-white/[0.04] hover:bg-white/[0.08] text-white border border-white/[0.08] hover:border-white/[0.15] font-mono text-xs uppercase tracking-wider rounded-lg transition-colors cursor-pointer">Return to Site</button>
-                <a href="https://twitter.com" target="_blank" rel="noreferrer noopener" className="h-10 px-4 bg-white/[0.02] hover:bg-white/[0.06] text-white border border-white/[0.05] hover:border-white/[0.12] font-mono text-[10px] uppercase tracking-wider rounded-lg flex items-center justify-center gap-2 transition-colors">
+                <a href="https://x.com/panik_fi" target="_blank" rel="noreferrer noopener" className="h-10 px-4 bg-white/[0.02] hover:bg-white/[0.06] text-white border border-white/[0.05] hover:border-white/[0.12] font-mono text-[10px] uppercase tracking-wider rounded-lg flex items-center justify-center gap-2 transition-colors">
                   <Twitter className="w-3.5 h-3.5 fill-current" /><span>Follow on X for launch news</span>
                 </a>
               </div>

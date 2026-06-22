@@ -40,10 +40,38 @@ import {
   useWalletRegistry,
 } from "./lib/live";
 import { ProtocolLogo } from "./components/ProtocolLogo";
+import { Onboarding } from "./components/Onboarding";
+import {
+  SEGMENT_LABELS,
+  RISK_TIER_LABELS,
+  type Segment,
+  type RiskTier,
+  type ProfileResult,
+} from "./lib/profiling";
 import { motion, AnimatePresence } from "motion/react";
 
 type SidebarTab = "compass" | "watch" | "advisor" | "portfolio";
 type RiskProfile = "conservative" | "moderate" | "aggressive";
+
+// Colour for the user-segment badge in the dashboard header.
+const SEGMENT_BADGE: Record<Segment, string> = {
+  explorer: "bg-sky-500/10 text-sky-400 border-sky-500/25",
+  yield_seeker: "bg-emerald-500/10 text-emerald-400 border-emerald-500/25",
+  liquidity_provider: "bg-cyan-500/10 text-cyan-400 border-cyan-500/25",
+  active_trader: "bg-amber-500/10 text-amber-400 border-amber-500/25",
+  risk_optimizer: "bg-violet-500/10 text-violet-400 border-violet-500/25",
+};
+
+// Colour ramp for the 5-level risk-tier badge (Conservative → Aggressive).
+const TIER_BADGE: Record<RiskTier, string> = {
+  conservative: "bg-emerald-500/10 text-emerald-400 border-emerald-500/25",
+  moderately_conservative: "bg-teal-500/10 text-teal-300 border-teal-500/25",
+  moderate: "bg-panik-orange/10 text-panik-orange border-panik-orange/25",
+  moderately_aggressive: "bg-orange-500/10 text-orange-400 border-orange-500/25",
+  aggressive: "bg-red-500/10 text-red-400 border-red-500/25",
+};
+
+const truncateAddress = (a: string) => (a.length > 12 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a);
 
 interface VaultPreset {
   id: string;
@@ -217,17 +245,50 @@ const VAULT_PRESETS: VaultPreset[] = [
 export function AppDemo() {
   // Navigation tabs exactly reflecting the Figma screenshot
   const [activeTab, setActiveTab] = useState<SidebarTab>("portfolio");
+  const [tooltipStep, setTooltipStep] = useState<number | null>(
+    () => localStorage.getItem("panik_tour_seen") === "true" ? null : 1
+  );
   const [selectedPresetId, setSelectedPresetId] = useState<string>("moonwell-weth-debt");
-  const [selectedRiskProfile, setSelectedRiskProfile] = useState<RiskProfile>("moderate");
+  const [selectedRiskProfile, setSelectedRiskProfile] = useState<RiskProfile>(
+    () => (localStorage.getItem("panik_risk_profile") as RiskProfile | null) ?? "moderate"
+  );
   const [selectedRiskBreakdownPreset, setSelectedRiskBreakdownPreset] = useState<VaultPreset | null>(null);
+
+  // ── First-time onboarding (no backend — localStorage-persisted) ──────────
+  const [showOnboarding, setShowOnboarding] = useState<boolean>(
+    () => localStorage.getItem("panik_onboarded") !== "true"
+  );
+  const [onboardedWallet, setOnboardedWallet] = useState<string | null>(
+    () => localStorage.getItem("panik_wallet")
+  );
+  const [userSegment, setUserSegment] = useState<Segment | null>(
+    () => localStorage.getItem("panik_user_segment") as Segment | null
+  );
+  const [riskTier, setRiskTier] = useState<RiskTier | null>(
+    () => localStorage.getItem("panik_risk_tier") as RiskTier | null
+  );
+
+  const handleOnboardingComplete = (result: ProfileResult, wallet: string) => {
+    localStorage.setItem("panik_onboarded", "true");
+    localStorage.setItem("panik_risk_profile", result.riskProfile3); // 3-level (Compass)
+    localStorage.setItem("panik_risk_tier", result.riskTier);         // 5-level (display)
+    localStorage.setItem("panik_user_segment", result.segment);
+    localStorage.setItem("panik_risk_score", String(result.riskScore));
+    localStorage.setItem("panik_wallet", wallet);
+    setSelectedRiskProfile(result.riskProfile3);
+    setUserSegment(result.segment);
+    setRiskTier(result.riskTier);
+    setOnboardedWallet(wallet);
+    setShowOnboarding(false);
+  };
 
   // Telemetry simulation
   const [blockNumber, setBlockNumber] = useState<number>(19384910);
   const [gasPrice, setGasPrice] = useState<number>(2.8);
   const [secTillUpdate, setSecTillUpdate] = useState<number>(60);
   const [logs, setLogs] = useState<string[]>([
-    "08:04:12 UTC - Sentry telemetry daemon initialized on Base RPC node.",
-    "08:04:13 UTC - Active guardrail listener bound. Connected presets loaded.",
+    "08:04:12 UTC - Risk engine initialized on Base RPC node.",
+    "08:04:13 UTC - Position listener bound. Connected presets loaded.",
     "08:04:15 UTC - Status OK. Integrity rate: 99.8%"
   ]);
 
@@ -339,6 +400,9 @@ export function AppDemo() {
 
   // Recommendations internal sub-tab
   const [recommendationsSubTab, setRecommendationsSubTab] = useState<"advisor" | "breakdown">("advisor");
+  const [advisorNotifyChecked, setAdvisorNotifyChecked] = useState<boolean>(
+    () => localStorage.getItem("panik_advisor_notify") === "true"
+  );
 
   // Synchronize state values when active position changes
   useEffect(() => {
@@ -504,21 +568,35 @@ export function AppDemo() {
     setTimeout(() => setAlertSuccessMessage(null), 4000);
   };
 
+  const TOUR_STEPS = [
+    { step: 1, label: "Start here", body: "This is your Panik dashboard. Use the sidebar to navigate between tools." },
+    { step: 2, label: "Connect your wallet", body: "Link your wallet so Panik can read your live on-chain positions." },
+    { step: 3, label: "Open your first position in Compass", body: "Go to Compass to browse risk-scored positions matched to your profile." },
+  ];
+  const currentTourStep = TOUR_STEPS.find((s) => s.step === tooltipStep) ?? null;
+  const dismissTour = () => {
+    setTooltipStep(null);
+    localStorage.setItem("panik_tour_seen", "true");
+  };
+
   return (
+    <>
+    {/* First-time onboarding overlay: 5-question profiling quiz → wallet.
+        Wallet is mandatory (no skip) — the overlay only closes on completion. */}
+    {showOnboarding && <Onboarding onComplete={handleOnboardingComplete} />}
+
     <div className="flex h-screen w-screen overflow-hidden bg-[#0A0A0B] text-[#F0F4FF] font-sans antialiased text-sm">
-      
+
       {/* 1. LEFT SIDEBAR PANEL (exactly modeled after the Figma UI) */}
       <aside className="w-64 h-full shrink-0 flex flex-col justify-between border-r border-white/[0.06] bg-[#0A0A0B] p-6 z-30">
         
         {/* Sidebar Header Brand block */}
         <div className="space-y-8">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-panik-orange/15 border border-panik-orange/30 flex items-center justify-center shadow-lg">
-              <ShieldCheck className="w-4.5 h-4.5 text-panik-orange" />
-            </div>
+            <img src="/panik-logo.png" alt="PANIK" width={32} height={32} style={{ objectFit: "contain" }} />
             <div className="flex flex-col">
               <span className="font-display font-extrabold text-lg tracking-widest text-white leading-none">PANIK</span>
-              <span className="text-[8px] font-mono tracking-widest text-[#F0F4FF]/40 uppercase mt-0.5">SENTRY PROTECTION</span>
+              <span className="text-[8px] font-mono tracking-widest text-[#F0F4FF]/40 uppercase mt-0.5">RISK INTELLIGENCE</span>
             </div>
           </div>
 
@@ -591,7 +669,34 @@ export function AppDemo() {
         
         {/* TOP STATUS BAR (Gas feeds, Block Number precisely simulating real active smart contracts) */}
         <header className="h-16 shrink-0 border-b border-white/[0.06] px-8 flex items-center justify-between bg-[#0E1015]/40 backdrop-blur-md">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
+            {/* User segment badge (from onboarding profiling) */}
+            {userSegment && (
+              <span
+                title={`Your DeFi profile: ${SEGMENT_LABELS[userSegment]}`}
+                className={`hidden md:flex items-center px-2.5 py-1 rounded-lg border text-[11px] font-mono font-bold ${SEGMENT_BADGE[userSegment]}`}
+              >
+                {SEGMENT_LABELS[userSegment]}
+              </span>
+            )}
+
+            {/* Risk-appetite tier badge (5-level) */}
+            {riskTier && (
+              <span
+                title={`Your risk appetite: ${RISK_TIER_LABELS[riskTier]}`}
+                className={`flex items-center px-2.5 py-1 rounded-lg border text-[11px] font-mono font-bold ${TIER_BADGE[riskTier]}`}
+              >
+                {RISK_TIER_LABELS[riskTier]}
+              </span>
+            )}
+
+            {/* Onboarded wallet (mandatory — always set after onboarding) */}
+            {onboardedWallet && (
+              <span className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.02] border border-white/[0.05] text-[11px] font-mono text-white/70">
+                <Wallet className="w-3 h-3 text-panik-orange" />
+                <span>{truncateAddress(onboardedWallet)}</span>
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-6 text-[10px] font-mono text-[#748BAA]">
@@ -634,7 +739,7 @@ export function AppDemo() {
                     <p className="text-panik-text-secondary font-mono text-xs">
                       Find positions matching your risk profile
                       {compassLive && (
-                        <span className="ml-2 text-[10px] text-emerald-400">● live engine scores</span>
+                        <span className="ml-2 text-[10px] text-emerald-400">● live</span>
                       )}
                     </p>
                   </div>
@@ -854,16 +959,15 @@ export function AppDemo() {
                     <div className="absolute top-0 right-0 w-32 h-32 bg-panik-orange/5 rounded-full blur-2xl pointer-events-none"></div>
                     <div className="flex justify-between items-center mb-4.5 border-b border-white/[0.05] pb-3">
                       <div>
-                        <span className="block text-[9px] font-mono tracking-widest text-panik-orange uppercase">ACTIVE PROTECTOR</span>
+                        <span className="block text-[9px] font-mono tracking-widest text-panik-orange uppercase">POSITION SIMULATOR</span>
                         <h2 className="text-xl font-display font-extrabold text-white tracking-wide">
                           {activePreset.protocol} Detail Sandbox
                         </h2>
                       </div>
                       <div className="flex flex-col items-end">
-                        <span className="text-[9px] font-mono text-panik-text-secondary uppercase">DAEMON SENTINEL</span>
-                        <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded border border-emerald-500/25 flex items-center gap-1 font-bold mt-1">
+                        <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded border border-emerald-500/25 flex items-center gap-1 font-bold">
                           <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse"></span>
-                          {liveWatch ? "LIVE ENGINE" : "SIMULATED"}
+                          {liveWatch ? "Live" : "Demo"}
                         </span>
                       </div>
                     </div>
@@ -1076,7 +1180,7 @@ export function AppDemo() {
 
                         <div>
                           <div className="flex justify-between text-[10px] font-mono mb-1">
-                            <span className="text-[#F0F4FF]/75">Protocol Exploitation index</span>
+                            <span className="text-[#F0F4FF]/75">Protocol Risk</span>
                             <span className="text-white font-bold">{positionState.breakdown.protocolSafety}%</span>
                           </div>
                           <div className="h-1 bg-white/5 rounded-full overflow-hidden">
@@ -1184,6 +1288,21 @@ export function AppDemo() {
                   <p className="text-sm text-panik-text-secondary leading-relaxed font-sans max-w-md">
                     Our AI-powered guardrail recommendations, automated health rating models, and simulated action guides are currently undergoing extensive parameter audits on Base. Joining the waitlist guarantees early access to this feature upon release.
                   </p>
+
+                  <label className="mt-6 flex items-center gap-3 cursor-pointer select-none group">
+                    <input
+                      type="checkbox"
+                      checked={advisorNotifyChecked}
+                      onChange={(e) => {
+                        setAdvisorNotifyChecked(e.target.checked);
+                        localStorage.setItem("panik_advisor_notify", String(e.target.checked));
+                      }}
+                      className="w-4 h-4 rounded border border-white/20 bg-[#111318] accent-panik-orange cursor-pointer"
+                    />
+                    <span className="text-xs font-mono text-panik-text-secondary group-hover:text-white transition-colors">
+                      Notify me when Advisor goes live
+                    </span>
+                  </label>
                 </div>
               </motion.div>
             )}
@@ -1200,7 +1319,7 @@ export function AppDemo() {
               >
                 <div className="border-b border-white/[0.06] pb-5">
                   <h1 className="text-3xl font-display font-extrabold tracking-tight text-white mb-1">DeFi Portfolio</h1>
-                  <p className="text-panik-text-secondary font-mono text-xs">Insured capital backing and automated flash hedges across monitored vaults</p>
+                  <p className="text-panik-text-secondary font-mono text-xs">Real-time risk monitoring across your connected DeFi positions</p>
                 </div>
 
                 {/* Wallet selector — a portfolio is ONE wallet; ALL = ops/registry view */}
@@ -1345,7 +1464,7 @@ export function AppDemo() {
                     </div>
 
                     <div className="mt-4 p-3 bg-panik-orange/5 border border-panik-orange/15 rounded-xl text-[11px] font-mono text-[#F0F4FF]/75 leading-relaxed">
-                      💡 All positions undergo real-time continuous drift analysis against active collateral price benchmarks.
+                      All positions undergo continuous drift analysis against current collateral price benchmarks.
                     </div>
                   </div>
                 </div>
@@ -1530,10 +1649,10 @@ export function AppDemo() {
                       <div className="bg-white/[0.01] border border-white/[0.04] p-3 rounded-lg leading-relaxed">
                         <span className="block text-[8px] text-white/30 uppercase mb-1 font-bold">8. Protocol Security Signal</span>
                         <p className="text-white/80">
-                          {selectedRiskBreakdownPreset.protocol === "Aave V3" && "Aave V3 safety module is fully funded. 0 exploits reported. Dynamic interest rate curves active. Multi-sig governance secure."}
-                          {selectedRiskBreakdownPreset.protocol === "Compound" && "Compound Protocol holds secure decentralized oracle reserves. Peg deviations are zero. Governance keys held in multi-sig."}
-                          {selectedRiskBreakdownPreset.protocol === "Moonwell" && "Moonwell Protocol is fully monitored by Base RPC. 48-hour governance timelock on system variables active."}
-                          {selectedRiskBreakdownPreset.protocol === "GMX" && "GMX leverage pool operates with a robust pool backstop. Total locked value represents 120% debt security. Fully backed."}
+                          {selectedRiskBreakdownPreset.protocol === "Aave V3" && "Aave V3 safety module is funded and active. Dynamic interest-rate curves and isolation mode in place. Governance secured by multi-sig and timelock."}
+                          {selectedRiskBreakdownPreset.protocol === "Moonwell" && "Moonwell markets run on Base with a 48-hour governance timelock on system parameters. Collateral factors monitored continuously."}
+                          {selectedRiskBreakdownPreset.protocol === "Morpho" && "Morpho Blue markets are isolated and immutable — oracle and LLTV are fixed at market creation, so live parameters cannot be changed by governance."}
+                          {selectedRiskBreakdownPreset.protocol === "Compound V3" && "Compound III (Comet) isolates a single borrowable asset against monitored collateral. Parameter changes pass a governance timelock."}
                         </p>
                       </div>
 
@@ -1551,7 +1670,7 @@ export function AppDemo() {
                         <p className="text-white/80">
                           {selectedRiskBreakdownPreset.baseRisk < 20 
                             ? "Position health maintains normal volatility parameters. No automated hedges currently required."
-                            : "Position health has entered an elevated stress variance range. Automatic sentinel flash-loan repayment prepared at under < 1.25 health factor."
+                            : "Position health has entered an elevated stress range. Consider reducing leverage or adding collateral before the health factor approaches 1.25."
                           }
                         </p>
                       </div>
@@ -1578,7 +1697,7 @@ export function AppDemo() {
                     }}
                     className="flex-1 py-3 text-center text-xs font-mono font-bold text-white bg-gradient-to-tr from-panik-orange to-red-500 rounded-lg cursor-pointer hover:opacity-90 transition-all shadow-lg"
                   >
-                    Open Simulator ⚡
+                    Open Simulator
                   </button>
                 </div>
               </motion.div>
@@ -1588,6 +1707,44 @@ export function AppDemo() {
 
       </div>
 
+      {/* First-run onboarding tooltip tour */}
+      {currentTourStep && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] w-full max-w-sm px-4">
+          <div className="bg-[#111318] border border-panik-orange/30 rounded-xl p-4 shadow-2xl shadow-black/60">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-mono text-panik-orange uppercase tracking-widest font-bold">
+                Step {currentTourStep.step} of {TOUR_STEPS.length}
+              </span>
+              <button onClick={dismissTour} className="text-white/30 hover:text-white transition-colors text-[10px] font-mono uppercase cursor-pointer">
+                Skip tour
+              </button>
+            </div>
+            <p className="text-sm font-display font-semibold text-white mb-0.5">{currentTourStep.label}</p>
+            <p className="text-xs text-panik-text-secondary font-sans leading-relaxed mb-4">{currentTourStep.body}</p>
+            <div className="flex items-center justify-between">
+              <div className="flex gap-1">
+                {TOUR_STEPS.map((s) => (
+                  <span key={s.step} className={`h-1 w-6 rounded-full transition-colors ${s.step <= currentTourStep.step ? "bg-panik-orange" : "bg-white/10"}`} />
+                ))}
+              </div>
+              <button
+                onClick={() => {
+                  if (tooltipStep !== null && tooltipStep < TOUR_STEPS.length) {
+                    setTooltipStep(tooltipStep + 1);
+                  } else {
+                    dismissTour();
+                  }
+                }}
+                className="h-8 px-4 bg-panik-orange hover:bg-panik-orange/90 text-white font-mono text-[10px] uppercase tracking-wider rounded-lg cursor-pointer transition-colors"
+              >
+                {tooltipStep === TOUR_STEPS.length ? "Done" : "Next →"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
+    </>
   );
 }

@@ -73,6 +73,7 @@ export default function App() {
   };
 
   const handleOpenWaitlistModal = (initialEmail: string = "") => {
+    if (hasSubscribed) return;
     setWaitlistInitialEmail(initialEmail);
     setIsWaitlistModalOpen(true);
   };
@@ -102,6 +103,8 @@ export default function App() {
       <Navigation
         onScrollTo={handleScrollToSection}
         subscriberCount={displayCount}
+        onOpenWaitlistModal={handleOpenWaitlistModal}
+        hasSubscribed={hasSubscribed}
       />
 
       {/* Global continuous background techy globe spanning Hero and Dashboard preview */}
@@ -135,9 +138,8 @@ export default function App() {
       {/* <ProtocolCoverage /> */}
 
       {/* Bottom CTA & Live allowed addresses queue */}
-      <WaitlistCTA 
-        onJoinWaitlist={handleJoinWaitlist} 
-        subscribersList={subscribers} 
+      <WaitlistCTA
+        subscribersList={subscribers}
         hasSubscribed={hasSubscribed}
         onOpenWaitlistModal={handleOpenWaitlistModal}
       />

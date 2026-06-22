@@ -10,7 +10,6 @@ import { WaitlistEntry } from "../types";
 import { ScrollReveal } from "./ScrollReveal";
 
 interface WaitlistCTAProps {
-  onJoinWaitlist: (email: string) => void;
   subscribersList: WaitlistEntry[];
   hasSubscribed: boolean;
   onOpenWaitlistModal: (initialEmail?: string) => void;
@@ -44,7 +43,7 @@ const formatSubscriberIdentity = (identity: string) => {
   return cleaned.length > 8 ? `${cleaned.substring(0, 4)}...` : cleaned;
 };
 
-export function WaitlistCTA({ onJoinWaitlist, subscribersList, hasSubscribed, onOpenWaitlistModal }: WaitlistCTAProps) {
+export function WaitlistCTA({ subscribersList, hasSubscribed, onOpenWaitlistModal }: WaitlistCTAProps) {
   return (
     <section id="waitlist-form" className="relative py-32 px-6 overflow-hidden">
       
@@ -272,7 +271,7 @@ export function WaitlistCTA({ onJoinWaitlist, subscribersList, hasSubscribed, on
                 <div>
                   <h3 className="font-mono text-xs tracking-wider uppercase text-panik-orange font-semibold">ACCESS GRANTED // SLOT IMMINENT</h3>
                   <p className="text-xs text-panik-text-secondary mt-0.5">
-                    We've registered your sign-off profile. Your cryptographic registry endpoint is securely queued in our smart-contract allowlist buffer.
+                    You're in. We'll reach out directly when beta opens for your cohort.
                   </p>
                 </div>
               </div>

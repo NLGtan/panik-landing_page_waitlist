@@ -36,15 +36,7 @@ import { motion, AnimatePresence } from "motion/react";
 function ProtocolLogo({ protocol, size = "w-6 h-6" }: { protocol: string; size?: string }) {
   if (protocol.toLowerCase().includes("aave")) {
     return (
-      <div className={`rounded-xl overflow-hidden shrink-0 ${size} flex items-center justify-center bg-[#8C82F2] p-1.5 border border-white/[0.08]`}>
-        <svg viewBox="0 0 100 100" className="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
-          {/* Aave Ghost Arc */}
-          <path d="M 12,50 A 38,38 0 0,1 88,50 L 76,50 A 26,26 0 0,0 24,50 Z" fill="#FFFFFF" />
-          {/* Aave Eyes */}
-          <circle cx="37" cy="50" r="7.5" fill="#FFFFFF" />
-          <circle cx="63" cy="50" r="7.5" fill="#FFFFFF" />
-        </svg>
-      </div>
+      <img src="/aave-logo.png" alt="Aave" className={`rounded-xl shrink-0 ${size} object-contain`} />
     );
   }
   if (protocol.toLowerCase().includes("compound")) {
@@ -397,9 +389,7 @@ export function AppMockup({ onBackToLanding, onJoinWaitlist, hasSubscribed }: Ap
         {/* Sidebar Header Brand block */}
         <div className="space-y-8">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-panik-orange/15 border border-panik-orange/30 flex items-center justify-center shadow-lg">
-              <ShieldCheck className="w-4.5 h-4.5 text-panik-orange" />
-            </div>
+            <img src="/panik-logo.png" alt="PANIK" width={32} height={32} style={{ objectFit: "contain" }} />
             <div className="flex flex-col">
               <span className="font-display font-extrabold text-lg tracking-widest text-white leading-none">PANIK</span>
               <span className="text-[8px] font-mono tracking-widest text-[#F0F4FF]/40 uppercase mt-0.5">SENTRY PROTECTION</span>

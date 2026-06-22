@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>PANIK — UST/LUNA Collapse</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0c0e14;color:#e2e8f0;font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:900px;margin:0 auto;padding:48px 24px 80px}
+  .nav{display:flex;align-items:center;gap:16px;margin-bottom:40px}
+  .nav a{color:#64748b;text-decoration:none;font-size:13px;letter-spacing:.05em}
+  .nav a:hover{color:#e2e8f0}
+  .nav span{color:#1e2535;font-size:13px}
+  .badge{display:inline-block;padding:4px 12px;border-radius:100px;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:16px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);color:#ef4444}
+  h1{font-size:clamp(26px,5vw,38px);font-weight:700;letter-spacing:-.02em;line-height:1.2;margin-bottom:12px}
+  .date{color:#64748b;font-size:14px;margin-bottom:20px}
+  .intro{color:#94a3b8;font-size:16px;line-height:1.75;max-width:700px;margin-bottom:36px;border-left:3px solid rgba(239,68,68,.4);padding-left:18px}
+  .kpi-row{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:48px}
+  .kpi{background:#131720;border:1px solid #1e2535;border-radius:12px;padding:18px 22px;flex:1;min-width:130px}
+  .kpi .num{font-size:28px;font-weight:700;color:#ef4444;line-height:1;margin-bottom:3px}
+  .kpi .lbl{font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:.08em}
+  .chart-card{background:#131720;border:1px solid #1e2535;border-radius:16px;padding:28px;margin-bottom:24px}
+  .chart-card h2{font-size:18px;font-weight:700;margin-bottom:6px;letter-spacing:-.01em}
+  .chart-card .sub{color:#64748b;font-size:13px;margin-bottom:24px;line-height:1.5}
+  .chart-wrap{position:relative;height:280px}
+  .takeaway{background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);border-radius:12px;padding:20px 24px;margin-top:32px}
+  .takeaway h3{font-size:14px;font-weight:700;color:#ef4444;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
+  .takeaway p{color:#cbd5e1;font-size:15px;line-height:1.7}
+  .legend-manual{display:flex;gap:20px;flex-wrap:wrap;margin-top:12px}
+  .legend-item{display:flex;align-items:center;gap:7px;font-size:13px;color:#94a3b8}
+  .legend-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+  footer{margin-top:56px;padding-top:24px;border-top:1px solid #1e2535;font-size:13px;color:#475569}
+  footer a{color:#64748b;text-decoration:none}
+  footer a:hover{color:#94a3b8}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+  @media(max-width:640px){.two-col{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="nav">
+    <a href="index.html">← All Events</a>
+    <span>·</span>
+    <a href="june-2022-eth-crash.html">← June 2022</a>
+    <span>·</span>
+    <a href="ftx-2022.html">Next: FTX →</a>
+  </nav>
+
+  <div class="badge">Event 02 · May 2022</div>
+  <h1>UST / LUNA Collapse</h1>
+  <div class="date">May 9–13, 2022 · Aave V2 Ethereum · 1,353 wallets affected</div>
+  <p class="intro">UST was supposed to be a "safe" $1 stablecoin backed algorithmically by LUNA. In four days it went from $1 to near-zero — one of the fastest and most destructive collapses in crypto history. People using UST as collateral for loans lost everything almost instantly.</p>
+
+  <div class="kpi-row">
+    <div class="kpi"><div class="num">$92.9M</div><div class="lbl">Debt liquidated</div></div>
+    <div class="kpi"><div class="num">1,353</div><div class="lbl">Wallets hit</div></div>
+    <div class="kpi"><div class="num">2,657</div><div class="lbl">Liquidation events</div></div>
+    <div class="kpi"><div class="num">4 days</div><div class="lbl">$1 → near-zero</div></div>
+  </div>
+
+  <!-- Chart 1: UST Price Collapse -->
+  <div class="chart-card">
+    <h2>The collapse: UST price, May 8–14, 2022</h2>
+    <p class="sub">UST was designed to always be worth $1. When the peg broke on May 9th, the selling pressure created a death spiral. By May 13th, UST was worth less than a penny. Anyone with UST-backed loans had no time to react.</p>
+    <div class="chart-wrap">
+      <canvas id="c1"></canvas>
+    </div>
+    <div class="legend-manual" style="margin-top:16px">
+      <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div>UST price (supposed to stay at $1.00)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:rgba(249,115,22,.5);border-radius:2px;height:3px;width:16px"></div>Target: $1.00 peg</div>
+    </div>
+  </div>
+
+  <!-- Chart 2: Accuracy (Recall + False Alarm) -->
+  <div class="chart-card">
+    <h2>Did PANIK catch the positions that blew up?</h2>
+    <p class="sub">Even in a crash this sudden, PANIK's static health-factor floor caught 94 out of 100 at-risk positions. The crash was too fast for the "crash-regime" booster to activate, but the baseline protection worked. Only 1 in 5 safe positions received an unnecessary warning.</p>
+    <div class="chart-wrap" style="height:240px">
+      <canvas id="c2"></canvas>
+    </div>
+  </div>
+
+  <div class="takeaway">
+    <h3>Bottom line</h3>
+    <p>UST was a "lightning" crash — so fast that even our crash-regime booster (which needs 30 days of price data to confirm a sell-off) never activated. Yet PANIK still caught <strong>94 out of 100 positions</strong> heading for liquidation, because the basic health-factor floor triggered as positions got dangerously close to the edge. The <strong>20% false-alarm rate</strong> — the lowest of any event tested — shows that in a crisis this fast, PANIK's conservative approach doesn't over-react. The key lesson: PANIK's core protection works independently of market regime detection, making it robust against sudden collapses.</p>
+  </div>
+
+  <footer>
+    <p>Data: Full borrower population, Aave V2 Ethereum, May 2022. Exact HF via archive RPC <code>getUserAccountData()</code>, 20 dense 6-hour blocks through the collapse window. Dune queries 7739767, 7740207. Engine: <code>packages/scoring/src/computeScore.ts</code>. Full methodology: <a href="../BACKTEST_METHODOLOGY.md">BACKTEST_METHODOLOGY.md</a>.</p>
+  </footer>
+</div>
+
+<script>
+Chart.defaults.color = '#64748b';
+Chart.defaults.borderColor = '#1e2535';
+Chart.defaults.font.family = '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif';
+
+// Chart 1: UST price collapse
+const labels1 = ['May 8', 'May 9\n(peg breaks)', 'May 10', 'May 11', 'May 12', 'May 13', 'May 14'];
+const ustPrice = [1.00, 0.97, 0.76, 0.45, 0.18, 0.06, 0.02];
+
+new Chart(document.getElementById('c1'), {
+  type: 'line',
+  data: {
+    labels: ['May 8', 'May 9 (peg breaks)', 'May 10', 'May 11', 'May 12', 'May 13', 'May 14'],
+    datasets: [
+      {
+        label: 'UST Price',
+        data: ustPrice,
+        borderColor: '#ef4444',
+        backgroundColor: 'rgba(239,68,68,.12)',
+        borderWidth: 2.5,
+        fill: true,
+        tension: 0.3,
+        pointRadius: ustPrice.map((_, i) => i === 1 ? 8 : 4),
+        pointBackgroundColor: ustPrice.map((_, i) => i === 1 ? '#ef4444' : 'rgba(239,68,68,.6)'),
+      },
+      {
+        label: '$1.00 peg',
+        data: Array(7).fill(1.00),
+        borderColor: 'rgba(249,115,22,.4)',
+        borderWidth: 1.5,
+        borderDash: [6, 4],
+        pointRadius: 0,
+        fill: false,
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: ctx => {
+            if (ctx.datasetIndex === 1) return null;
+            const v = ctx.parsed.y;
+            return ` UST = $${v.toFixed(2)}  (${((1 - v) * 100).toFixed(0)}% below peg)`;
+          }
+        },
+        filter: item => item.datasetIndex === 0,
+        backgroundColor: '#1e2535',
+        borderColor: '#334155',
+        borderWidth: 1,
+        titleColor: '#e2e8f0',
+        bodyColor: '#94a3b8',
+        padding: 10,
+      }
+    },
+    scales: {
+      x: { grid: { color: '#131720' }, ticks: { font: { size: 12 } } },
+      y: {
+        min: -0.05,
+        max: 1.15,
+        grid: { color: '#1e2535' },
+        ticks: {
+          font: { size: 12 },
+          callback: v => v >= 0 ? `$${v.toFixed(2)}` : ''
+        },
+        title: { display: true, text: 'UST Price (USD)', color: '#64748b', font: { size: 12 } }
+      }
+    }
+  }
+});
+
+// Chart 2: Recall vs False Alarm (horizontal grouped bar)
+new Chart(document.getElementById('c2'), {
+  type: 'bar',
+  data: {
+    labels: ['Caught doomed positions\n(Recall)', 'Unnecessary warnings on safe positions\n(False-alarm rate)'],
+    datasets: [{
+      label: 'PANIK',
+      data: [94, 20],
+      backgroundColor: ['rgba(34,197,94,.7)', 'rgba(251,191,36,.45)'],
+      borderColor: ['#16a34a', '#d97706'],
+      borderWidth: 1.5,
+      borderRadius: 8,
+    }]
+  },
+  options: {
+    indexAxis: 'y',
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: { label: ctx => ` ${ctx.parsed.x}% of positions` },
+        backgroundColor: '#1e2535',
+        borderColor: '#334155',
+        borderWidth: 1,
+        titleColor: '#e2e8f0',
+        bodyColor: '#94a3b8',
+        padding: 10,
+      }
+    },
+    scales: {
+      x: {
+        max: 110,
+        grid: { color: '#1e2535' },
+        ticks: { callback: v => `${v}%`, font: { size: 13 } },
+        title: { display: true, text: 'Percentage of positions', color: '#64748b', font: { size: 12 } }
+      },
+      y: {
+        grid: { display: false },
+        ticks: { font: { size: 13, weight: '500' } }
+      }
+    }
+  }
+});
+</script>
+</body>
+</html>
