@@ -7,7 +7,7 @@
  * never reaches the browser. Any failure degrades to a deterministic template.
  */
 
-import type { ProfileClassification } from "../classify/types";
+import type { Alignment, ProfileClassification, StatedProfile } from "../classify/types";
 import type { FetchFn } from "./types";
 
 export interface ProfileNarration {
@@ -31,6 +31,26 @@ Return ONLY JSON: {"tagline": string, "description": string}
   discipline, and recency (daysSinceLastActivity). Pick the 3-4 MOST telling, cite real values,
   and vary phrasing so no two wallets read alike. Max ~55 words.
 Tone: sharp, factual, specific, no hype, no marketing fluff.`;
+
+const COMBINED_SYSTEM_PROMPT = `You write a personalized risk persona for one DeFi wallet by reconciling TWO inputs:
+1. "stated" — what the user said about themselves in a short onboarding quiz.
+2. "onChain" — what their wallet's lifetime cross-chain history actually shows (GROUND TRUTH).
+You are also given "alignment" (aligned | understated | overstated), already computed — DO NOT
+recompute or contradict it. understated = the chain is riskier than they claimed; overstated =
+the chain is tamer than they claimed.
+
+Never change the onChain profile/archetype or invent numbers absent from the features. If a field
+is null, omit it.
+
+Return ONLY JSON: {"tagline": string, "description": string}
+- tagline: one short line that headlines the RECONCILIATION. If understated/overstated, contrast
+  them directly, e.g. "You said Moderate — your wallet says Aggressive." If aligned, affirm it,
+  e.g. "Aggressive — and your wallet backs it up."
+- description: 2-3 sentences. First acknowledge the stated intent, then ground it in the specific
+  on-chain behavior (favorite protocol/chain, top collateral/borrow asset, stablecoin vs volatile
+  debt, leverage ratio, liquidations, repay discipline, tenure, recency), citing real values. End
+  with what this means for how Panik should watch them. Max ~60 words.
+Tone: sharp, factual, specific, a little provocative when stated and revealed diverge. No hype.`;
 
 export interface NarratorOptions {
   baseUrl?: string;
@@ -62,6 +82,60 @@ export class OpenRouterNarrator {
     } catch {
       return fallbackNarration(classification);
     }
+  }
+
+  /**
+   * Narrate the reconciliation of the quiz's stated profile against the
+   * on-chain verdict. `alignment` is precomputed (deterministic); the LLM only
+   * phrases it. Falls back to deterministic prose on any failure.
+   */
+  async narrateCombined(
+    classification: ProfileClassification,
+    stated: StatedProfile,
+    alignment: Alignment,
+  ): Promise<ProfileNarration> {
+    try {
+      return await this.callLlmCombined(classification, stated, alignment);
+    } catch {
+      return fallbackCombined(classification, stated, alignment);
+    }
+  }
+
+  private async callLlmCombined(
+    c: ProfileClassification,
+    stated: StatedProfile,
+    alignment: Alignment,
+  ): Promise<ProfileNarration> {
+    const res = await this.fetchFn(`${this.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: this.model,
+        temperature: this.temperature,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: COMBINED_SYSTEM_PROMPT },
+          {
+            role: "user",
+            content: JSON.stringify({
+              stated,
+              alignment,
+              onChain: { profile: c.profile, archetype: c.archetype, features: c.features },
+            }),
+          },
+        ],
+      }),
+    });
+    if (!res.ok) throw new Error(`OpenRouter: HTTP ${res.status}`);
+    const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+    const content = body.choices?.[0]?.message?.content;
+    if (!content) throw new Error("OpenRouter: empty completion");
+    const parsed = JSON.parse(content) as Partial<ProfileNarration>;
+    if (!parsed.tagline || !parsed.description) throw new Error("OpenRouter: malformed JSON");
+    return { tagline: parsed.tagline, description: parsed.description };
   }
 
   private async callLlm(c: ProfileClassification): Promise<ProfileNarration> {
@@ -117,4 +191,26 @@ export function fallbackNarration(c: ProfileClassification): ProfileNarration {
     tagline: `${Profile} — ${c.archetype}, ${qualifier}.`,
     description: c.reasons.length ? `${c.reasons.join(". ")}.` : `${Profile} risk profile.`,
   };
+}
+
+/** Deterministic reconciliation narration — the safe fallback for narrateCombined. */
+export function fallbackCombined(
+  c: ProfileClassification,
+  stated: StatedProfile,
+  alignment: Alignment,
+): ProfileNarration {
+  const Stated = stated.riskProfile3.charAt(0).toUpperCase() + stated.riskProfile3.slice(1);
+  const OnChain = c.profile.charAt(0).toUpperCase() + c.profile.slice(1);
+  const tagline =
+    alignment === "aligned"
+      ? `${OnChain} — and your wallet backs it up.`
+      : `You said ${Stated} — your wallet says ${OnChain}.`;
+  const lead =
+    alignment === "aligned"
+      ? `Your answers and your on-chain history agree.`
+      : alignment === "understated"
+        ? `You describe yourself as ${stated.riskProfile3}, but on-chain you take more risk.`
+        : `You describe yourself as ${stated.riskProfile3}, but on-chain you play it safer.`;
+  const body = c.reasons.length ? ` ${c.reasons.join(". ")}.` : "";
+  return { tagline, description: `${lead}${body}` };
 }

@@ -92,14 +92,28 @@ export class DuneHistoryProvider {
     return { "X-Dune-API-Key": this.apiKey, "Content-Type": "application/json" };
   }
 
-  /** Lifetime cross-chain lending features for one wallet. */
+  /**
+   * Lifetime cross-chain lending features for one wallet — blocking execute +
+   * poll loop. Used by the local dev API; the serverless start/poll path uses
+   * startExecution + pollFeatures instead (timeout-proof).
+   */
   async getFeatures(wallet: string): Promise<WalletFeatures> {
-    const executionId = await this.execute(wallet);
-    const row = await this.pollResult(executionId);
-    return row ? this.toFeatures(row) : EMPTY_FEATURES;
+    const executionId = await this.startExecution(wallet);
+    const deadline = Date.now() + this.timeoutSec * 1000;
+    for (;;) {
+      const r = await this.pollFeatures(executionId);
+      if (r.status === "done") return r.features;
+      if (Date.now() > deadline) throw new Error("Dune execution timed out");
+      await new Promise((res) => setTimeout(res, this.pollMs));
+    }
   }
 
-  private async execute(wallet: string): Promise<string> {
+  /**
+   * Kick off the Dune execution and return its id immediately (~1s). The
+   * serverless "start scan" step calls this on wallet entry; the result is
+   * polled later via pollFeatures so no single request runs long.
+   */
+  async startExecution(wallet: string): Promise<string> {
     const res = await this.fetchFn(`${this.baseUrl}/query/${this.queryId}/execute`, {
       method: "POST",
       headers: this.headers(),
@@ -114,27 +128,36 @@ export class DuneHistoryProvider {
     return body.execution_id;
   }
 
-  private async pollResult(executionId: string): Promise<DuneRow | null> {
-    const deadline = Date.now() + this.timeoutSec * 1000;
-    for (;;) {
-      const res = await this.fetchFn(`${this.baseUrl}/execution/${executionId}/results`, {
-        headers: this.headers(),
-      });
-      if (!res.ok) throw new Error(`Dune results: HTTP ${res.status}`);
-      const body = (await res.json()) as {
-        state: string;
-        result?: { rows: DuneRow[] };
-      };
+  /**
+   * One non-blocking status check for an execution. Returns the features when
+   * complete, or {status:"pending"} while still running. Throws on a failed/
+   * cancelled/expired execution. This is the serverless-friendly primitive:
+   * each call is a single fast HTTP request, never a long poll.
+   */
+  async pollFeatures(
+    executionId: string,
+  ): Promise<{ status: "pending" } | { status: "done"; features: WalletFeatures }> {
+    const res = await this.fetchFn(`${this.baseUrl}/execution/${executionId}/results`, {
+      headers: this.headers(),
+    });
+    // Transient — rate-limited (429) or a Dune hiccup (5xx). Don't fail the
+    // whole reveal; report pending so the client keeps polling (with backoff).
+    if (res.status === 429 || res.status >= 500) return { status: "pending" };
+    if (!res.ok) throw new Error(`Dune results: HTTP ${res.status}`);
+    const body = (await res.json()) as { state: string; result?: { rows: DuneRow[] } };
 
-      if (body.state === "QUERY_STATE_COMPLETED") {
-        return body.result?.rows?.[0] ?? null;
-      }
-      if (body.state === "QUERY_STATE_FAILED" || body.state === "QUERY_STATE_CANCELLED" || body.state === "QUERY_STATE_EXPIRED") {
-        throw new Error(`Dune execution ${body.state}`);
-      }
-      if (Date.now() > deadline) throw new Error("Dune execution timed out");
-      await new Promise((r) => setTimeout(r, this.pollMs));
+    if (body.state === "QUERY_STATE_COMPLETED") {
+      const row = body.result?.rows?.[0];
+      return { status: "done", features: row ? this.toFeatures(row) : EMPTY_FEATURES };
     }
+    if (
+      body.state === "QUERY_STATE_FAILED" ||
+      body.state === "QUERY_STATE_CANCELLED" ||
+      body.state === "QUERY_STATE_EXPIRED"
+    ) {
+      throw new Error(`Dune execution ${body.state}`);
+    }
+    return { status: "pending" };
   }
 
   private toFeatures(r: DuneRow): WalletFeatures {

@@ -23,9 +23,20 @@ export { DefiLlamaProvider } from "./providers/defillama";
 export * from "./providers/chainlink";
 export { TtlCache } from "./providers/cache";
 export { DuneHistoryProvider, PANIK_FEATURES_QUERY_ID, EMPTY_FEATURES } from "./providers/duneHistory";
-export { OpenRouterNarrator, fallbackNarration, type ProfileNarration } from "./providers/narrator";
+export { OpenRouterNarrator, fallbackNarration, fallbackCombined, type ProfileNarration } from "./providers/narrator";
 // DeFi-persona classifier (deterministic) — see docs/technical-docs/WALLET_PROFILER.md
 export * from "./classify/types";
 export * from "./classify/params";
-export { classifyWallet, emergingProtocols } from "./classify/classifyWallet";
+export { classifyWallet, emergingProtocols, archetypeFor } from "./classify/classifyWallet";
+export { alignmentOf } from "./classify/reconcile";
 export { profileWallet, type WalletProfile } from "./classify/profileWallet";
+export {
+  startProfileScan,
+  resolveProfileScan,
+  type ProfileCache,
+  type ProfileCacheEntry,
+  type SessionDeps,
+  type CombinedProfile,
+  type StartResult,
+  type ResolveResult,
+} from "./classify/profileSession";

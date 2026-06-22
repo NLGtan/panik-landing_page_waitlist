@@ -51,6 +51,27 @@ export interface WalletFeatures {
   stableBorrowPct: number;
 }
 
+/** The onboarding-quiz (self-reported) profile, for stated-vs-revealed analysis. */
+export interface StatedProfile {
+  /** The 3-level bucket the Compass uses (from the quiz's riskProfile3). */
+  riskProfile3: RiskProfile;
+  /** 5-level display tier, e.g. "moderately_aggressive". */
+  riskTier?: string;
+  /** Behavioral segment, e.g. "risk_optimizer". */
+  segment?: string;
+  segmentLabel?: string;
+  /** Raw quiz score 0–18. */
+  riskScore?: number;
+}
+
+/**
+ * How the on-chain (revealed) profile compares to the stated (quiz) one:
+ * - aligned     — same bucket
+ * - understated — on-chain is riskier than the user claimed
+ * - overstated  — on-chain is tamer than the user claimed
+ */
+export type Alignment = "aligned" | "understated" | "overstated";
+
 export interface ProfileClassification {
   /** The predicted Compass type — the verdict. */
   profile: RiskProfile;

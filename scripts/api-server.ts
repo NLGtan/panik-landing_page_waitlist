@@ -23,20 +23,20 @@ import {
   CoinGeckoProvider,
   CompoundActiveReader,
   DefiLlamaProvider,
-  DuneHistoryProvider,
   MARKETS,
   MoonwellActiveReader,
   MorphoActiveReader,
-  OpenRouterNarrator,
-  profileWallet,
+  resolveProfileScan,
   scoreProspective,
+  startProfileScan,
   statusFor,
   type ActiveScore,
   type Protocol,
   type PublicClientLike,
   type RiskProfile,
-  type WalletProfile,
+  type StatedProfile,
 } from "../packages/scoring/src/index";
+import { getProfileDeps, isEvmAddress } from "./lib/profileDeps";
 
 const PORT = Number(process.env.PANIK_API_PORT ?? 8787);
 const cgKey = process.env.COINGECKO_API_KEY;
@@ -45,8 +45,9 @@ const dbUrl = process.env.SUPABASE_DB_URL;
 // Persona profiler keys are OPTIONAL — the rest of the API runs without them;
 // /api/profile reports 503 if Dune is unconfigured, and narration falls back
 // to deterministic prose if OpenRouter is absent.
+// Profiler keys are read by getProfileDeps from env directly; we only need to
+// know here whether to advertise the endpoints (DUNE + DB are the hard reqs).
 const duneKey = process.env.DUNE_API_KEY;
-const openRouterKey = process.env.OPENROUTER_API_KEY;
 if (!cgKey || !alchemyKey || !dbUrl) {
   console.error("Missing env (COINGECKO_API_KEY / ALCHEMY_API_KEY_BASE_MAINNET / SUPABASE_DB_URL)");
   process.exit(1);
@@ -75,8 +76,9 @@ const adapter = new ActiveAdapter(
 );
 
 // Persona profiler (analytics tier — once-per-wallet, cached; NOT the live loop).
-const history = duneKey ? new DuneHistoryProvider(duneKey) : null;
-const narrator = openRouterKey ? new OpenRouterNarrator(openRouterKey) : undefined;
+// Deps (Dune + Supabase cache + optional OpenRouter narrator) are built lazily
+// by getProfileDeps from env, shared with the Vercel serverless functions.
+const profilerConfigured = Boolean(duneKey && dbUrl);
 
 const db = new pg.Pool({
   connectionString: dbUrl,
@@ -194,32 +196,8 @@ async function getCompass(): Promise<typeof compassCache> {
   return compassCache;
 }
 
-// ── wallet persona profiles (24h cache; lifetime history barely moves) ─────
-// Cache-first so a returning wallet costs zero Dune credits and zero LLM calls,
-// mirroring WALLET_PROFILER.md §3. In-memory here; production persists the same
-// shape to watched_wallets (inferred_profile / profile_features / ai_* columns).
-const PROFILE_TTL_MS = 24 * 60 * 60 * 1000;
-const profileCache = new Map<string, { at: number; profile: WalletProfile }>();
-const profileInflight = new Map<string, Promise<WalletProfile>>();
-
-async function getProfile(wallet: string): Promise<WalletProfile> {
-  const key = wallet.toLowerCase();
-  const cached = profileCache.get(key);
-  if (cached && Date.now() - cached.at < PROFILE_TTL_MS) return cached.profile;
-
-  // De-dupe concurrent first-loads for the same wallet (Dune is slow + metered).
-  const existing = profileInflight.get(key);
-  if (existing) return existing;
-
-  const job = (async () => {
-    const profile = await profileWallet(key, { history: history!, narrator });
-    profileCache.set(key, { at: Date.now(), profile });
-    return profile;
-  })().finally(() => profileInflight.delete(key));
-
-  profileInflight.set(key, job);
-  return job;
-}
+// Wallet persona profiles are handled by the shared start/poll session
+// (Supabase-cached), identical to the Vercel functions — see the routes below.
 
 // ── chain telemetry (10s cache) ───────────────────────────────────────────
 let chainCache: { at: number; blockNumber: number; gasGwei: number } = {
@@ -304,31 +282,42 @@ app.get("/api/prospective", async (req, res) => {
   }
 });
 
-// Predict the wallet's DeFi-persona (one of the 3 Compass types) from its
-// lifetime cross-chain lending history. Returns the data AND the AI prose.
-app.get("/api/profile", async (req, res) => {
-  const wallet = String(req.query.wallet ?? "").trim();
-  if (!/^0x[0-9a-fA-F]{40}$/.test(wallet)) {
-    res.status(400).json({ error: "invalid wallet address" });
+// Persona profiler — timeout-proof start/poll, mirroring the Vercel functions
+// (same shared session + Supabase cache). The onboarding fires /start on wallet
+// entry, then polls /result (with the quiz's stated profile) at the reveal.
+app.use(express.json());
+
+app.post("/api/profile/start", async (req, res) => {
+  const wallet = String(req.query.wallet ?? req.body?.wallet ?? "").trim();
+  if (!isEvmAddress(wallet)) {
+    res.status(400).json({ error: "invalid EVM wallet address" });
     return;
   }
-  if (!history) {
-    res.status(503).json({ error: "profiler unconfigured (DUNE_API_KEY missing)" });
+  if (!profilerConfigured) {
+    res.status(503).json({ error: "profiler unconfigured (DUNE_API_KEY / SUPABASE_DB_URL)" });
     return;
   }
   try {
-    const p = await getProfile(wallet);
-    res.json({
-      wallet: wallet.toLowerCase(),
-      profile: p.profile,
-      archetype: p.archetype,
-      riskAppetiteIndex: p.riskAppetiteIndex,
-      confidence: p.confidence,
-      tagline: p.tagline,
-      description: p.description,
-      reasons: p.reasons,
-      features: p.features,
-    });
+    res.json(await startProfileScan(wallet.toLowerCase(), getProfileDeps()));
+  } catch (err) {
+    res.status(502).json({ error: (err as Error).message });
+  }
+});
+
+app.post("/api/profile/result", async (req, res) => {
+  const wallet = String(req.query.wallet ?? req.body?.wallet ?? "").trim();
+  const executionId: string | undefined = req.body?.executionId ?? (req.query.executionId as string | undefined);
+  const stated: StatedProfile | undefined = req.body?.stated;
+  if (!isEvmAddress(wallet)) {
+    res.status(400).json({ error: "invalid EVM wallet address" });
+    return;
+  }
+  if (!profilerConfigured) {
+    res.status(503).json({ error: "profiler unconfigured (DUNE_API_KEY / SUPABASE_DB_URL)" });
+    return;
+  }
+  try {
+    res.json(await resolveProfileScan(wallet.toLowerCase(), { executionId, stated }, getProfileDeps()));
   } catch (err) {
     res.status(502).json({ error: (err as Error).message });
   }
