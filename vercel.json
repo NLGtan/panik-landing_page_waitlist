@@ -5,5 +5,9 @@
   "outputDirectory": "dist",
   "cleanUrls": true,
   "trailingSlash": false,
-  "rewrites": [{ "source": "/app", "destination": "/app.html" }]
+  "rewrites": [
+    { "source": "/app", "destination": "/app.html" },
+    { "source": "/founding", "destination": "/founding.html" },
+    { "source": "/early-access", "destination": "/founding.html" }
+  ]
 }

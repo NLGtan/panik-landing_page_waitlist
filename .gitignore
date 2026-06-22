@@ -14,3 +14,8 @@ Progress/
 scripts/backtest/data/forward-test-log.jsonl
 scripts/backtest/data/cohort-query-id.json
 scripts/backtest/.tmp-*.sql
+
+# Foundry (smart contract build artifacts)
+contracts/out/
+contracts/cache/
+contracts/lib/
