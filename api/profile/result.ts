@@ -8,7 +8,9 @@
  * during/after the onboarding quiz. See docs/technical-docs/WALLET_PROFILER.md.
  */
 
-import { resolveProfileScan, type StatedProfile } from "../../packages/scoring/src/index";
+// Specific modules, not the barrel — see server/profileDeps.ts (avoids viem/ws).
+import { resolveProfileScan } from "../../packages/scoring/src/classify/profileSession";
+import type { StatedProfile } from "../../packages/scoring/src/classify/types";
 import { getProfileDeps, isEvmAddress } from "../../server/profileDeps";
 
 interface Req { method?: string; query: Record<string, string | string[] | undefined>; body?: unknown }

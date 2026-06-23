@@ -5,7 +5,9 @@
  * Fast (~1s) — Vercel Hobby-safe. See docs/technical-docs/WALLET_PROFILER.md.
  */
 
-import { startProfileScan } from "../../packages/scoring/src/index";
+// Specific module, not the barrel — the barrel pulls viem→isows→ws which esbuild
+// can't bundle → FUNCTION_INVOCATION_FAILED on Vercel. See server/profileDeps.ts.
+import { startProfileScan } from "../../packages/scoring/src/classify/profileSession";
 import { getProfileDeps, isEvmAddress } from "../../server/profileDeps";
 
 interface Req { method?: string; query: Record<string, string | string[] | undefined>; body?: unknown }

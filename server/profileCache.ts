@@ -9,7 +9,8 @@
  */
 
 import type pg from "pg";
-import type { ProfileCache, ProfileCacheEntry } from "../packages/scoring/src/index";
+// Specific module, not the barrel — see profileDeps.ts (avoids pulling viem/ws).
+import type { ProfileCache, ProfileCacheEntry } from "../packages/scoring/src/classify/profileSession";
 
 export class SupabaseProfileCache implements ProfileCache {
   constructor(private readonly pool: pg.Pool) {}

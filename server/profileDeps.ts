@@ -8,7 +8,13 @@
  */
 
 import pg from "pg";
-import { DuneHistoryProvider, OpenRouterNarrator, type SessionDeps } from "../packages/scoring/src/index";
+// Import specific modules, NOT the barrel (../packages/scoring/src/index): the
+// barrel re-exports the chain adapters → viem → isows → "ws", an optional dep
+// esbuild can't resolve, which crashes the Vercel function at load
+// (FUNCTION_INVOCATION_FAILED). The profiler needs none of that.
+import { DuneHistoryProvider } from "../packages/scoring/src/providers/duneHistory";
+import { OpenRouterNarrator } from "../packages/scoring/src/providers/narrator";
+import type { SessionDeps } from "../packages/scoring/src/classify/profileSession";
 import { SupabaseProfileCache } from "./profileCache";
 
 let pool: pg.Pool | null = null;
