@@ -51,22 +51,13 @@ export default defineConfig(() => {
           // "founding user" — hidden escrow page (direct URL only, not linked from nav)
           founding: path.resolve(__dirname, 'founding.html'),
         },
-        output: {
-          manualChunks(id) {
-            if (id.includes('node_modules')) {
-              if (id.includes('react')) {
-                return 'vendor-react';
-              }
-              if (id.includes('motion')) {
-                return 'vendor-motion';
-              }
-              if (id.includes('lucide')) {
-                return 'vendor-lucide';
-              }
-              return 'vendor';
-            }
-          },
-        },
+        // No manualChunks: the previous hand-rolled split matched any path
+        // containing "react" (e.g. @tanstack/react-query) into vendor-react,
+        // while vendor depended on it back → a CIRCULAR chunk (vendor ->
+        // vendor-react -> vendor). At runtime React was undefined when the
+        // vendor chunk ran createContext → uncaught TypeError → BLANK page on
+        // every entry. Vite's automatic chunking splits these multi-entry
+        // bundles correctly without the cycle.
       },
     },
   };
