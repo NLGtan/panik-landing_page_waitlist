@@ -9,7 +9,7 @@
  */
 
 import { resolveProfileScan, type StatedProfile } from "../../packages/scoring/src/index";
-import { getProfileDeps, isEvmAddress } from "../../scripts/lib/profileDeps";
+import { getProfileDeps, isEvmAddress } from "../../server/profileDeps";
 
 interface Req { method?: string; query: Record<string, string | string[] | undefined>; body?: unknown }
 interface Res { status(code: number): Res; json(body: unknown): void }

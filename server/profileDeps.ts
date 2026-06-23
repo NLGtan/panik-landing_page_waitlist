@@ -2,10 +2,13 @@
  * Lazily-built, module-scoped profiler dependencies shared by the dev Express
  * server and the Vercel serverless functions. Singletons survive warm
  * invocations so a Vercel function reuses one pg pool / provider set.
+ *
+ * Lives in server/ (NOT scripts/) so it ships to Vercel — the api/ functions
+ * import it. scripts/ is excluded by .vercelignore.
  */
 
 import pg from "pg";
-import { DuneHistoryProvider, OpenRouterNarrator, type SessionDeps } from "../../packages/scoring/src/index";
+import { DuneHistoryProvider, OpenRouterNarrator, type SessionDeps } from "../packages/scoring/src/index";
 import { SupabaseProfileCache } from "./profileCache";
 
 let pool: pg.Pool | null = null;

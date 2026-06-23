@@ -36,7 +36,7 @@ import {
   type RiskProfile,
   type StatedProfile,
 } from "../packages/scoring/src/index";
-import { getProfileDeps, isEvmAddress } from "./lib/profileDeps";
+import { getProfileDeps, isEvmAddress } from "../server/profileDeps";
 
 const PORT = Number(process.env.PANIK_API_PORT ?? 8787);
 const cgKey = process.env.COINGECKO_API_KEY;

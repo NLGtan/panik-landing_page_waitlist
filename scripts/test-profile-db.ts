@@ -6,7 +6,7 @@
  */
 
 import { resolveProfileScan, startProfileScan, type RiskProfile } from "../packages/scoring/src/index";
-import { getProfileDeps } from "./lib/profileDeps";
+import { getProfileDeps } from "../server/profileDeps";
 
 const wallet = (process.argv[2] ?? "0xaa40cb43f78b97701d0e5981d83822ed77dd57e9").toLowerCase();
 const stated = (process.argv[3] ?? "moderate") as RiskProfile;

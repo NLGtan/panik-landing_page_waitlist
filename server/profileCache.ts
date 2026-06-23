@@ -3,10 +3,13 @@
  * (serverless can't use in-memory). Stores the deterministic on-chain
  * classification per wallet; AI narration is regenerated per reveal.
  * Table: public.wallet_profiles (see supabase/migrations).
+ *
+ * Lives in server/ (NOT scripts/) so it's uploaded to Vercel — the serverless
+ * functions in api/ import it. scripts/ is excluded by .vercelignore.
  */
 
 import type pg from "pg";
-import type { ProfileCache, ProfileCacheEntry } from "../../packages/scoring/src/index";
+import type { ProfileCache, ProfileCacheEntry } from "../packages/scoring/src/index";
 
 export class SupabaseProfileCache implements ProfileCache {
   constructor(private readonly pool: pg.Pool) {}
