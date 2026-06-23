@@ -37,6 +37,7 @@ import {
   useCompassScores,
   useLiveScores,
   useProspective,
+  useWalletPositions,
   useWalletRegistry,
 } from "./lib/live";
 import { ProtocolLogo } from "./components/ProtocolLogo";
@@ -304,13 +305,18 @@ export function AppDemo() {
   const { scores: compassLive } = useCompassScores();
   const chainTel = useChainTelemetry();
 
-  // A user portfolio is ONE wallet. The registry holds several (validation
-  // cohort), so Portfolio gets a selector: defaults to the first wallet,
-  // "ALL" remains as the ops/registry view. SIWE later replaces this with
-  // the connected wallet.
+  // Once a user has onboarded with their OWN wallet, the dashboard follows that
+  // wallet (its live Base positions) instead of the seeded validation registry.
+  // boundMode hides the registry selector entirely. (SIWE later proves ownership.)
+  const boundMode = Boolean(onboardedWallet);
+  const ownLive = useWalletPositions(onboardedWallet, selectedRiskProfile);
+
+  // A user portfolio is ONE wallet. In boundMode that's the onboarded wallet;
+  // otherwise (ops view) the registry holds the validation cohort with a selector.
   const [selectedWallet, setSelectedWallet] = useState<string | "all" | null>(null); // null = not yet initialised
   const registry = useWalletRegistry();
   const wallets = useMemo(() => {
+    if (boundMode) return [{ wallet: onboardedWallet as string, label: "Your wallet" }];
     // Registry is the source of truth: wallets with zero readable positions
     // still get a pill (their panel shows "no open positions" honestly).
     if (registry) return registry.map((r) => ({ wallet: r.wallet, label: r.label }));
@@ -320,7 +326,7 @@ export function AppDemo() {
       if (!seen.has(p.wallet)) seen.set(p.wallet, { wallet: p.wallet, label: p.label });
     }
     return [...seen.values()];
-  }, [registry, livePositions]);
+  }, [boundMode, onboardedWallet, registry, livePositions]);
 
   useEffect(() => {
     if (selectedWallet === null && wallets.length > 0) {
@@ -329,11 +335,13 @@ export function AppDemo() {
   }, [wallets, selectedWallet]);
 
   const portfolioPositions = useMemo(() => {
+    // boundMode: ownLive is already this one wallet's positions — no filtering.
+    if (boundMode) return ownLive.positions;
     if (!livePositions) return null;
     return selectedWallet && selectedWallet !== "all"
       ? livePositions.filter((p) => p.wallet === selectedWallet)
       : livePositions;
-  }, [livePositions, selectedWallet]);
+  }, [boundMode, ownLive.positions, livePositions, selectedWallet]);
 
   // Presets with LIVE engine scores overlaid (fallback: static baseRisk).
   // Defined before activePreset so Compass, Portfolio and Watch all read
@@ -1340,16 +1348,19 @@ export function AppDemo() {
                         {w.wallet.slice(0, 6)}…{w.wallet.slice(-4)}
                       </button>
                     ))}
-                    <button
-                      onClick={() => setSelectedWallet("all")}
-                      className={`px-3 py-1.5 rounded-lg text-[10px] font-mono border transition-all cursor-pointer ${
-                        selectedWallet === "all"
-                          ? "bg-panik-orange/15 text-panik-orange border-panik-orange/30 font-bold"
-                          : "bg-white/[0.02] text-panik-text-secondary border-white/[0.06] hover:text-white"
-                      }`}
-                    >
-                      ALL (registry)
-                    </button>
+                    {/* Registry/ops view — hidden once the user is bound to their own wallet. */}
+                    {!boundMode && (
+                      <button
+                        onClick={() => setSelectedWallet("all")}
+                        className={`px-3 py-1.5 rounded-lg text-[10px] font-mono border transition-all cursor-pointer ${
+                          selectedWallet === "all"
+                            ? "bg-panik-orange/15 text-panik-orange border-panik-orange/30 font-bold"
+                            : "bg-white/[0.02] text-panik-text-secondary border-white/[0.06] hover:text-white"
+                        }`}
+                      >
+                        ALL (registry)
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -1413,7 +1424,11 @@ export function AppDemo() {
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-4">
                   {/* Left Column: the selected wallet's REAL positions */}
                   <div className="lg:col-span-7">
-                    <LivePositions positions={portfolioPositions} updatedAt={liveUpdatedAt} offline={liveOffline} />
+                    <LivePositions
+                      positions={portfolioPositions}
+                      updatedAt={boundMode ? ownLive.updatedAt : liveUpdatedAt}
+                      offline={boundMode ? ownLive.offline : liveOffline}
+                    />
                   </div>
 
                   {/* Right Column: Asset Allocation visual breakdown (lg:col-span-5) */}

@@ -93,6 +93,45 @@ export function useLiveScores() {
   return { positions: data?.positions ?? null, updatedAt: data?.updatedAt ?? 0, offline };
 }
 
+/**
+ * Live positions for ONE wallet — the onboarded user's own wallet. Polls
+ * /api/positions every 60s; no-ops (returns null) when wallet is null. Degrades
+ * gracefully offline like the other hooks.
+ */
+export function useWalletPositions(wallet: string | null, profile: string) {
+  const [data, setData] = useState<{ updatedAt: number; positions: LiveWalletPosition[] } | null>(null);
+  const [offline, setOffline] = useState(false);
+
+  useEffect(() => {
+    if (!wallet) {
+      setData(null);
+      setOffline(false);
+      return;
+    }
+    let cancelled = false;
+    const url = `/api/positions?wallet=${wallet}&profile=${encodeURIComponent(profile)}`;
+    const load = async () => {
+      try {
+        const body = await getJson<{ updatedAt: number; positions: LiveWalletPosition[] }>(url);
+        if (!cancelled) {
+          setData(body);
+          setOffline(false);
+        }
+      } catch {
+        if (!cancelled) setOffline(true);
+      }
+    };
+    void load();
+    const t = setInterval(load, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [wallet, profile]);
+
+  return { positions: data?.positions ?? null, updatedAt: data?.updatedAt ?? 0, offline };
+}
+
 /** Live prospective scores for the Compass presets, keyed by preset id. */
 export function useCompassScores() {
   const { data, offline } = usePolled<{ updatedAt: number; scores: CompassLiveScore[] }>(

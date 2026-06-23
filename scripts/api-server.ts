@@ -248,6 +248,38 @@ app.get("/api/scores", async (_req, res) => {
   }
 });
 
+// Live positions for ONE arbitrary wallet — the onboarded user's own wallet —
+// scored on demand via the same ActiveAdapter (current Base positions). Lets the
+// dashboard follow the pasted wallet instead of the seeded validation registry.
+// 60s cache per wallet (mirrors the live-loop cadence).
+const ownPosCache = new Map<string, { at: number; positions: LivePosition[] }>();
+app.get("/api/positions", async (req, res) => {
+  const wallet = String(req.query.wallet ?? "").trim().toLowerCase();
+  const profile = String(req.query.profile ?? "moderate") as RiskProfile;
+  if (!isEvmAddress(wallet)) {
+    res.status(400).json({ error: "invalid EVM wallet address" });
+    return;
+  }
+  const cached = ownPosCache.get(wallet);
+  if (cached && Date.now() - cached.at < 60_000) {
+    res.json({ updatedAt: cached.at, positions: cached.positions });
+    return;
+  }
+  try {
+    const scored = await adapter.scoreWallet(wallet);
+    const positions: LivePosition[] = scored.map((s) => ({
+      ...s,
+      label: null,
+      riskProfile: profile,
+      profileStatus: statusFor(profile, s.total),
+    }));
+    ownPosCache.set(wallet, { at: Date.now(), positions });
+    res.json({ updatedAt: Date.now(), positions });
+  } catch (err) {
+    res.status(502).json({ error: (err as Error).message });
+  }
+});
+
 app.get("/api/compass", async (_req, res) => {
   try {
     const { at, scores } = await getCompass();
