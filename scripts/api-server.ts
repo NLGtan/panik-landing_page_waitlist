@@ -78,7 +78,9 @@ const adapter = new ActiveAdapter(
 // Persona profiler (analytics tier — once-per-wallet, cached; NOT the live loop).
 // Deps (Dune + Supabase cache + optional OpenRouter narrator) are built lazily
 // by getProfileDeps from env, shared with the Vercel serverless functions.
-const profilerConfigured = Boolean(duneKey && dbUrl);
+const profilerConfigured = Boolean(
+  duneKey && process.env.SUPABASE_URL && process.env.SUPABASE_SECRET_KEY,
+);
 
 const db = new pg.Pool({
   // Use the TRANSACTION pooler (6543), not the SESSION pooler (5432). The

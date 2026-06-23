@@ -7,26 +7,46 @@
  * import it. scripts/ is excluded by .vercelignore.
  */
 
-import pg from "pg";
 // Import specific modules, NOT the barrel (../packages/scoring/src/index): the
 // barrel re-exports the chain adapters → viem → isows → "ws", an optional dep
-// esbuild can't resolve, which crashes the Vercel function at load
-// (FUNCTION_INVOCATION_FAILED). The profiler needs none of that.
+// esbuild can't resolve, which crashes the Vercel function at load. The cache
+// uses Supabase REST (fetch), not `pg`, for the same bundling reason.
 import { DuneHistoryProvider } from "../packages/scoring/src/providers/duneHistory";
 import { OpenRouterNarrator } from "../packages/scoring/src/providers/narrator";
 import type { SessionDeps } from "../packages/scoring/src/classify/profileSession";
-import { SupabaseProfileCache } from "./profileCache";
+import { RestProfileCache } from "./profileCache";
 
-let pool: pg.Pool | null = null;
 let deps: SessionDeps | null = null;
 
 /**
- * The profiler runs in short-lived contexts (serverless functions / per-request
- * Express handlers), so it wants Supabase's TRANSACTION pooler (port 6543), not
- * the SESSION pooler (5432) the long-lived Watch worker uses. Derive it from the
- * shared SUPABASE_DB_URL by swapping the port; an explicit SUPABASE_DB_POOL_URL
- * overrides. (5432 also tends to reset from some networks; 6543 is the right
- * mode here either way — Supabase's serverless recommendation.)
+ * Build (once) the SessionDeps from env. Throws if a required key is missing —
+ * the caller maps that to a 503. OPENROUTER_API_KEY is optional (deterministic
+ * fallback prose is used without it). The cache uses the Supabase REST API with
+ * the service key (bypasses RLS) — no pg, so it bundles cleanly on Vercel.
+ */
+export function getProfileDeps(): SessionDeps {
+  if (deps) return deps;
+
+  const duneKey = process.env.DUNE_API_KEY;
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SECRET_KEY;
+  const openRouterKey = process.env.OPENROUTER_API_KEY;
+  if (!duneKey) throw new Error("DUNE_API_KEY missing");
+  if (!supabaseUrl || !serviceKey) throw new Error("SUPABASE_URL / SUPABASE_SECRET_KEY missing");
+
+  deps = {
+    history: new DuneHistoryProvider(duneKey),
+    cache: new RestProfileCache(supabaseUrl, serviceKey),
+    narrator: openRouterKey ? new OpenRouterNarrator(openRouterKey) : undefined,
+  };
+  return deps;
+}
+
+/**
+ * Supabase TRANSACTION pooler URL (6543) for the dev api-server's own pg pool
+ * (the watched_wallets / live-scores loop) — the session pooler (5432) resets
+ * from some networks. Pure string logic; no pg import here so the serverless
+ * bundle stays pg-free.
  */
 export function transactionPoolerUrl(): string {
   const explicit = process.env.SUPABASE_DB_POOL_URL;
@@ -39,42 +59,6 @@ export function transactionPoolerUrl(): string {
   } catch {
     return base;
   }
-}
-
-function getPool(): pg.Pool {
-  if (pool) return pool;
-  pool = new pg.Pool({
-    connectionString: transactionPoolerUrl(),
-    ssl: { rejectUnauthorized: false },
-    max: 2,
-    connectionTimeoutMillis: 15_000,
-    idleTimeoutMillis: 30_000,
-    keepAlive: true,
-  });
-  pool.on("error", (err) => console.error(`profile pg pool error (recovered): ${err.message}`));
-  return pool;
-}
-
-/**
- * Build (once) the SessionDeps from env. Throws if DUNE_API_KEY or the DB URL
- * is missing — the caller maps that to a 503. OPENROUTER_API_KEY is optional
- * (deterministic fallback prose is used without it).
- */
-export function getProfileDeps(): SessionDeps {
-  if (deps) return deps;
-
-  const duneKey = process.env.DUNE_API_KEY;
-  const dbUrl = process.env.SUPABASE_DB_URL;
-  const openRouterKey = process.env.OPENROUTER_API_KEY;
-  if (!duneKey) throw new Error("DUNE_API_KEY missing");
-  if (!dbUrl) throw new Error("SUPABASE_DB_URL missing");
-
-  deps = {
-    history: new DuneHistoryProvider(duneKey),
-    cache: new SupabaseProfileCache(getPool()),
-    narrator: openRouterKey ? new OpenRouterNarrator(openRouterKey) : undefined,
-  };
-  return deps;
 }
 
 /** Validate an EVM address (the only addresses the lending spells cover). */

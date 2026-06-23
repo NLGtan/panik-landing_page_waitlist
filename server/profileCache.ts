@@ -1,52 +1,62 @@
 /**
- * Supabase-backed ProfileCache — persistent cache for the wallet profiler
- * (serverless can't use in-memory). Stores the deterministic on-chain
+ * Supabase ProfileCache — persistent cache for the wallet profiler, via the
+ * PostgREST REST API (pure fetch, no `pg`). Uses the service key, which
+ * bypasses the table's deny-all RLS. Stores the deterministic on-chain
  * classification per wallet; AI narration is regenerated per reveal.
  * Table: public.wallet_profiles (see supabase/migrations).
  *
- * Lives in server/ (NOT scripts/) so it's uploaded to Vercel — the serverless
- * functions in api/ import it. scripts/ is excluded by .vercelignore.
+ * Why REST, not a pg connection: these run as ESM-bundled Vercel serverless
+ * functions, and `pg` (a CJS package with internal require()s) crashes when
+ * bundled as ESM ("Dynamic require of 'events' is not supported"). fetch has no
+ * such problem and is the idiomatic serverless + Supabase pattern.
  */
 
-import type pg from "pg";
-// Specific module, not the barrel — see profileDeps.ts (avoids pulling viem/ws).
 import type { ProfileCache, ProfileCacheEntry } from "../packages/scoring/src/classify/profileSession";
 
-export class SupabaseProfileCache implements ProfileCache {
-  constructor(private readonly pool: pg.Pool) {}
+export class RestProfileCache implements ProfileCache {
+  private readonly base: string;
 
-  // The Supabase pooler frequently resets the first packet on a cold connect
-  // (same reason api-server's queryWatched retries once). One retry turns that
-  // harmless reset into a non-event instead of a 502.
-  private async query<T extends pg.QueryResultRow>(text: string, params: unknown[]): Promise<T[]> {
-    let lastErr: unknown;
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      try {
-        const { rows } = await this.pool.query<T>(text, params);
-        return rows;
-      } catch (err) {
-        lastErr = err;
-      }
-    }
-    throw lastErr;
+  constructor(
+    supabaseUrl: string,
+    private readonly serviceKey: string,
+  ) {
+    this.base = supabaseUrl.replace(/\/+$/, "");
+  }
+
+  private headers(): Record<string, string> {
+    return {
+      apikey: this.serviceKey,
+      Authorization: `Bearer ${this.serviceKey}`,
+      "Content-Type": "application/json",
+    };
   }
 
   async get(wallet: string): Promise<ProfileCacheEntry | null> {
-    const rows = await this.query<{ result: ProfileCacheEntry["classification"]; computed_at: Date }>(
-      "select result, computed_at from public.wallet_profiles where wallet = $1",
-      [wallet.toLowerCase()],
-    );
+    const url =
+      `${this.base}/rest/v1/wallet_profiles` +
+      `?wallet=eq.${wallet.toLowerCase()}&select=result,computed_at&limit=1`;
+    const res = await fetch(url, { headers: this.headers() });
+    if (!res.ok) throw new Error(`Supabase REST get: HTTP ${res.status}`);
+    const rows = (await res.json()) as {
+      result: ProfileCacheEntry["classification"];
+      computed_at: string;
+    }[];
     const row = rows[0];
     if (!row) return null;
     return { classification: row.result, computedAt: new Date(row.computed_at).getTime() };
   }
 
   async set(wallet: string, entry: ProfileCacheEntry): Promise<void> {
-    await this.query(
-      `insert into public.wallet_profiles (wallet, result, computed_at)
-       values ($1, $2, now())
-       on conflict (wallet) do update set result = excluded.result, computed_at = now()`,
-      [wallet.toLowerCase(), JSON.stringify(entry.classification)],
-    );
+    // Upsert on the wallet PK (Prefer: resolution=merge-duplicates).
+    const res = await fetch(`${this.base}/rest/v1/wallet_profiles`, {
+      method: "POST",
+      headers: { ...this.headers(), Prefer: "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify({
+        wallet: wallet.toLowerCase(),
+        result: entry.classification,
+        computed_at: new Date(entry.computedAt).toISOString(),
+      }),
+    });
+    if (!res.ok) throw new Error(`Supabase REST set: HTTP ${res.status}`);
   }
 }
