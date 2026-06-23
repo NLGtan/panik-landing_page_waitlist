@@ -36,7 +36,7 @@ import {
   type RiskProfile,
   type StatedProfile,
 } from "../packages/scoring/src/index";
-import { getProfileDeps, isEvmAddress } from "../server/profileDeps";
+import { getProfileDeps, isEvmAddress, transactionPoolerUrl } from "../server/profileDeps";
 
 const PORT = Number(process.env.PANIK_API_PORT ?? 8787);
 const cgKey = process.env.COINGECKO_API_KEY;
@@ -81,11 +81,14 @@ const adapter = new ActiveAdapter(
 const profilerConfigured = Boolean(duneKey && dbUrl);
 
 const db = new pg.Pool({
-  connectionString: dbUrl,
+  // Use the TRANSACTION pooler (6543), not the SESSION pooler (5432). The
+  // session pooler resets/times out from some networks (the watched_wallets
+  // "Connection terminated due to connection timeout" errors); 6543 connects
+  // in ~1s. Same fix the profiler uses. Watch-loop queries are simple SELECTs,
+  // so transaction-mode pooling is fine here.
+  connectionString: transactionPoolerUrl(),
   ssl: { rejectUnauthorized: false },
   max: 2,
-  // The ap-northeast-2 (Seoul) pooler cold-connects in ~5s from here; 8s left no
-  // headroom for jitter, which is what produced the connection-timeout crashes.
   connectionTimeoutMillis: 15_000,
   idleTimeoutMillis: 30_000,
   keepAlive: true,

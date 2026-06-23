@@ -22,7 +22,7 @@ let deps: SessionDeps | null = null;
  * overrides. (5432 also tends to reset from some networks; 6543 is the right
  * mode here either way — Supabase's serverless recommendation.)
  */
-function transactionPoolerUrl(): string {
+export function transactionPoolerUrl(): string {
   const explicit = process.env.SUPABASE_DB_POOL_URL;
   if (explicit) return explicit;
   const base = process.env.SUPABASE_DB_URL as string;
