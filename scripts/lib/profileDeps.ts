@@ -11,10 +11,31 @@ import { SupabaseProfileCache } from "./profileCache";
 let pool: pg.Pool | null = null;
 let deps: SessionDeps | null = null;
 
-function getPool(dbUrl: string): pg.Pool {
+/**
+ * The profiler runs in short-lived contexts (serverless functions / per-request
+ * Express handlers), so it wants Supabase's TRANSACTION pooler (port 6543), not
+ * the SESSION pooler (5432) the long-lived Watch worker uses. Derive it from the
+ * shared SUPABASE_DB_URL by swapping the port; an explicit SUPABASE_DB_POOL_URL
+ * overrides. (5432 also tends to reset from some networks; 6543 is the right
+ * mode here either way — Supabase's serverless recommendation.)
+ */
+function transactionPoolerUrl(): string {
+  const explicit = process.env.SUPABASE_DB_POOL_URL;
+  if (explicit) return explicit;
+  const base = process.env.SUPABASE_DB_URL as string;
+  try {
+    const u = new URL(base);
+    if (u.port === "5432") u.port = "6543";
+    return u.toString();
+  } catch {
+    return base;
+  }
+}
+
+function getPool(): pg.Pool {
   if (pool) return pool;
   pool = new pg.Pool({
-    connectionString: dbUrl,
+    connectionString: transactionPoolerUrl(),
     ssl: { rejectUnauthorized: false },
     max: 2,
     connectionTimeoutMillis: 15_000,
@@ -41,7 +62,7 @@ export function getProfileDeps(): SessionDeps {
 
   deps = {
     history: new DuneHistoryProvider(duneKey),
-    cache: new SupabaseProfileCache(getPool(dbUrl)),
+    cache: new SupabaseProfileCache(getPool()),
     narrator: openRouterKey ? new OpenRouterNarrator(openRouterKey) : undefined,
   };
   return deps;
