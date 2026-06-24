@@ -1,0 +1,6 @@
+event,date,chain,protocols,aave_liquidations,aave_wallets,debt_usd_millions,asset_risk_peak,crash_regime_fires
+stETH / June ETH crash,2022-06,ethereum,Aave V2,5551,1970,143.3,82,yes
+UST / LUNA collapse,2022-05,ethereum,Aave V2,2657,1353,92.9,57,no
+FTX collapse,2022-11,ethereum,Aave V2,334,221,21,65,partial
+USDC depeg (SVB),2023-03,ethereum,Aave V2,119,102,8,2,no
+Aug-2024 yen-carry crash,2024-08,base,Aave V3 / Compound III / Moonwell / Morpho,,1544,,52,no

@@ -1,0 +1,10 @@
+event,chain,protocol,method,n_liquidated,n_survivors,baseline_recall_pct,shipped_recall_pct,false_alarm_pct,precision_pct,median_lead_hours
+June 2022,ethereum,Aave V2,survivor-matrix,408,1259,49,88,34,,44
+UST/LUNA 2022,ethereum,Aave V2,survivor-matrix,262,1456,94,94,20,,
+FTX 2022,ethereum,Aave V2,survivor-matrix,34,1633,41,53,27,,
+USDC depeg 2023,ethereum,Aave V2,survivor-matrix,29,203,97,97,30,,
+POOLED (Ethereum),ethereum,Aave V2,survivor-matrix,704,4348,65,89,27,35,
+Aug-2024,base,Aave V3,survivor-matrix,1465,289,92,92,24,95,
+Aug-2024,base,Compound III,price-walk,117,,100,100,,,18
+Aug-2024,base,Moonwell,price-walk,564,,100,100,,,33
+Aug-2024,base,Morpho Blue,price-walk,192,,100,100,,,12
