@@ -31,7 +31,9 @@ builder = "dockerfile"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "npm run start:api"
+# Start command is set per-service in the Railway dashboard:
+#   panik/risk-scoring  → npm run start:api  (Dockerfile CMD default)
+#   panik-watch-worker  → npm run worker
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 10
 numReplicas = 1
