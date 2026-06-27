@@ -1548,7 +1548,15 @@ export function AppDemo() {
                         <p className="text-[10px] font-mono text-white/30">Onboard with an EVM wallet (0x...) to enable alerts.</p>
                       )}
                       {telegramLink.status === "opened" && (
-                        <p className="text-[10px] font-mono text-emerald-400">Press Start in the Telegram chat to finish linking.</p>
+                        <div className="space-y-1.5 pt-1.5 border-t border-white/[0.05]">
+                          <p className="text-[10px] font-mono text-emerald-400">Press Start in the Telegram chat to finish linking.</p>
+                          <p className="text-[11px] font-sans text-[#A0AEC0] leading-relaxed">
+                            If the link didn't open automatically, copy this command, open <strong className="text-white">@{telegramBotUsername}</strong> in Telegram, and send it:
+                          </p>
+                          <div className="flex items-center bg-[#0A0A0B]/80 border border-white/10 rounded px-2.5 py-1.5 font-mono text-[10px] text-emerald-400 select-all break-all">
+                            /start {telegramLink.code}
+                          </div>
+                        </div>
                       )}
                       {telegramLink.status === "error" && telegramLink.error && (
                         <p className="text-[10px] font-mono text-red-400">{telegramLink.error}</p>

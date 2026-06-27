@@ -55,6 +55,7 @@ interface LinkResponse {
 export function useTelegramLink() {
   const [status, setStatus] = useState<LinkStatus>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [code, setCode] = useState<string | null>(null);
 
   const connect = useCallback(async (wallet: string) => {
     if (!isEvmAddress(wallet)) {
@@ -64,6 +65,7 @@ export function useTelegramLink() {
     }
     setStatus("requesting");
     setError(null);
+    setCode(null);
     try {
       const res = await fetch("/api/telegram/link", {
         method: "POST",
@@ -75,6 +77,7 @@ export function useTelegramLink() {
         throw new Error(`http_${res.status}: ${txt.slice(0, 120)}`);
       }
       const data = (await res.json()) as LinkResponse;
+      setCode(data.code);
       window.open(data.deepLink, "_blank", "noopener,noreferrer");
       setStatus("opened");
     } catch (err) {
@@ -83,5 +86,5 @@ export function useTelegramLink() {
     }
   }, []);
 
-  return { status, error, connect };
+  return { status, error, code, connect };
 }
