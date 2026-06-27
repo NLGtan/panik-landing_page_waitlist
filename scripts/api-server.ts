@@ -246,8 +246,19 @@ app.use((req, res, next) => {
   next();
 });
 
+const BOOT_AT = new Date().toISOString();
+
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, cachedAt: scoresCache.at, positions: scoresCache.positions.length });
+});
+
+// Deploy marker - confirms WHICH commit is live (Railway injects the SHA).
+app.get("/api/version", (_req, res) => {
+  res.json({
+    service: "panik-api",
+    commit: process.env.RAILWAY_GIT_COMMIT_SHA ?? process.env.GIT_COMMIT ?? "unknown",
+    bootAt: BOOT_AT,
+  });
 });
 
 // Watch registry — the UI's wallet selector source (so wallets with no
