@@ -32,11 +32,27 @@ export interface WatchDeps {
   onError?(error: unknown, wallet: string): void;
   /** Default 60_000 (arch: 60s cycle). */
   intervalMs?: number;
+  /**
+   * Anti-spam debounce: a new status must hold this many CONSECUTIVE ticks
+   * before the transition is committed and emitted (see params.ALERT_POLICY).
+   * Default 1 = legacy behaviour (emit on the first observation of a change).
+   * A candidate that reverts before confirming is discarded silently.
+   */
+  confirmTicks?: number;
+}
+
+/** A status seen but not yet confirmed for `confirmTicks` consecutive ticks. */
+interface Pending {
+  status: ProfileStatus;
+  count: number;
 }
 
 export class WatchService {
   private readonly wallets = new Set<string>();
+  /** Last COMMITTED status per `${wallet}:${protocol}`. */
   private readonly lastStatus = new Map<string, ProfileStatus>();
+  /** In-flight candidate awaiting confirmation per key. */
+  private readonly pending = new Map<string, Pending>();
   private timer: ReturnType<typeof setInterval> | null = null;
 
   constructor(private readonly deps: WatchDeps) {}
@@ -49,28 +65,56 @@ export class WatchService {
     this.wallets.delete(wallet.toLowerCase());
   }
 
+  /**
+   * Seed the last committed status for a position WITHOUT emitting a transition.
+   * The worker calls this on startup from the persisted watch_transitions tail
+   * so a restart does not re-fire a "first observation" for every position
+   * (lastStatus is in-memory and would otherwise reset to empty).
+   */
+  seed(wallet: string, protocol: Protocol, status: ProfileStatus): void {
+    this.lastStatus.set(`${wallet.toLowerCase()}:${protocol}`, status);
+  }
+
   /** One scoring pass over all watched wallets. Exposed for tests/manual runs. */
   async tick(): Promise<void> {
+    const confirmTicks = Math.max(1, this.deps.confirmTicks ?? 1);
     for (const wallet of this.wallets) {
       try {
         const scores = await this.deps.scoreWallet(wallet);
         const profile = this.deps.profileFor(wallet);
         for (const s of scores) {
-          const to = statusFor(profile, s.total);
+          const observed = statusFor(profile, s.total);
           const key = `${wallet}:${s.protocol}`;
-          const from = this.lastStatus.get(key) ?? null;
-          if (from !== to) {
-            this.lastStatus.set(key, to);
-            this.deps.onTransition({
-              wallet,
-              protocol: s.protocol,
-              profile,
-              score: s.total,
-              band: s.band,
-              from,
-              to,
-            });
+          const committed = this.lastStatus.get(key) ?? null;
+
+          // Already at the committed status: nothing pending, nothing to do.
+          if (observed === committed) {
+            this.pending.delete(key);
+            continue;
           }
+
+          // Track how long the candidate has persisted. Reset the counter when
+          // the candidate changes (a different status, or a flap back-and-forth).
+          const prev = this.pending.get(key);
+          const count = prev && prev.status === observed ? prev.count + 1 : 1;
+
+          if (count < confirmTicks) {
+            this.pending.set(key, { status: observed, count });
+            continue; // not yet sustained, hold fire
+          }
+
+          // Confirmed: commit + emit, and clear the pending candidate.
+          this.pending.delete(key);
+          this.lastStatus.set(key, observed);
+          this.deps.onTransition({
+            wallet,
+            protocol: s.protocol,
+            profile,
+            score: s.total,
+            band: s.band,
+            from: committed,
+            to: observed,
+          });
         }
       } catch (error) {
         this.deps.onError?.(error, wallet);

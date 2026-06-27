@@ -93,3 +93,30 @@ export const ASSET_RISK_WEIGHTS = { vol: 0.5, drawdown: 0.35, corr: 0.15 } as co
 
 /** Systemic-risk internal mix — arch §Sub-Scores 4. */
 export const SYSTEMIC_RISK_WEIGHTS = { sector: 0.6, protocolFlight: 0.4 } as const;
+
+/**
+ * Alert-delivery policy - anti-spam / false-alarm controls (2026-06-27).
+ *
+ * The trigger itself (profile-relative status transitions, see profile.ts) is
+ * backtest-calibrated, but the backtest documents a ~24-27% intrinsic
+ * false-alarm rate, so notification VOLUME must be governed separately from the
+ * score. These knobs sit at the delivery layer (Watch worker + dispatcher), not
+ * the score, so tuning them never changes scoring or the backtest operating point.
+ *
+ *  - confirmTicks: a candidate status must hold this many CONSECUTIVE 60s ticks
+ *    before WatchService commits/emits the transition. Kills single-tick spikes
+ *    (flaky RPC read, momentary price wick) and threshold flapping (49/51
+ *    oscillation never survives 3 ticks). 3 ticks ~= 3 min, negligible against
+ *    the backtest's tens-of-hours CRITICAL lead times.
+ *  - cooldownMs: the dispatcher sends at most one alert per (wallet, protocol)
+ *    per window. A worsening escalation (approaching to outside) BYPASSES the
+ *    cooldown (strictly worse news); same-severity re-crossings are suppressed.
+ *  - minBorrowUsd: positions with no debt (HF null) or sub-dust debt can't be
+ *    liquidated, so they never generate a near-liquidation alert regardless of
+ *    composite score (which can rise on asset/systemic risk alone).
+ */
+export const ALERT_POLICY = {
+  confirmTicks: 3,
+  cooldownMs: 6 * 60 * 60 * 1000, // 6h
+  minBorrowUsd: 50,
+} as const;

@@ -30,6 +30,7 @@ import {
   scoreProspective,
   startProfileScan,
   statusFor,
+  truncateWallet,
   type ActiveScore,
   type Protocol,
   type PublicClientLike,
@@ -37,8 +38,13 @@ import {
   type StatedProfile,
 } from "../packages/scoring/src/index";
 import { getProfileDeps, isEvmAddress, transactionPoolerUrl } from "../server/profileDeps";
+import { TelegramStore } from "../server/telegramStore";
+import { sendMessage } from "../server/telegram";
+import { randomUUID } from "node:crypto";
+import path from "node:path";
 
-const PORT = Number(process.env.PANIK_API_PORT ?? 8787);
+// Railway (and most PaaS) inject PORT; fall back to PANIK_API_PORT for local dev.
+const PORT = Number(process.env.PORT ?? process.env.PANIK_API_PORT ?? 8787);
 const cgKey = process.env.COINGECKO_API_KEY;
 const alchemyKey = process.env.ALCHEMY_API_KEY_BASE_MAINNET;
 const dbUrl = process.env.SUPABASE_DB_URL;
@@ -224,6 +230,22 @@ async function getChain(): Promise<typeof chainCache> {
 // ── HTTP ───────────────────────────────────────────────────────────────────
 const app = express();
 
+// CORS - lets a separately-hosted SPA (e.g. the Vercel static frontend) call
+// this backend cross-origin. Set CORS_ORIGINS to a comma-separated allowlist in
+// production; defaults to "*" for local dev. (If the SPA is served same-origin
+// via a Vercel rewrite, CORS is moot but harmless.)
+const corsOrigins = (process.env.CORS_ORIGINS ?? "*").split(",").map((s) => s.trim());
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (corsOrigins.includes("*")) res.setHeader("Access-Control-Allow-Origin", "*");
+  else if (origin && corsOrigins.includes(origin)) res.setHeader("Access-Control-Allow-Origin", origin);
+  res.setHeader("Vary", "Origin");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Telegram-Bot-Api-Secret-Token");
+  if (req.method === "OPTIONS") { res.status(204).end(); return; }
+  next();
+});
+
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, cachedAt: scoresCache.at, positions: scoresCache.positions.length });
 });
@@ -360,6 +382,73 @@ app.post("/api/profile/result", async (req, res) => {
   }
 });
 
+// Telegram deep-link mint - dev parity with the Vercel function api/telegram/link.ts.
+// (The webhook itself needs a public URL; tunnel to this server or use Vercel.)
+const telegramConfigured = Boolean(
+  process.env.SUPABASE_URL && process.env.SUPABASE_SECRET_KEY && process.env.VITE_TELEGRAM_BOT_USERNAME,
+);
+app.post("/api/telegram/link", async (req, res) => {
+  const wallet = String(req.body?.wallet ?? req.query.wallet ?? "").trim().toLowerCase();
+  if (!isEvmAddress(wallet)) {
+    res.status(400).json({ error: "invalid EVM wallet address" });
+    return;
+  }
+  if (!telegramConfigured) {
+    res.status(503).json({ error: "telegram unconfigured (SUPABASE_* / VITE_TELEGRAM_BOT_USERNAME)" });
+    return;
+  }
+  try {
+    const code = randomUUID().replace(/-/g, "");
+    await TelegramStore.fromEnv().createLinkCode(code, wallet, 15 * 60 * 1000);
+    const botUsername = process.env.VITE_TELEGRAM_BOT_USERNAME as string;
+    res.json({ code, botUsername, deepLink: `https://t.me/${botUsername}?start=${code}`, expiresInSec: 900 });
+  } catch (err) {
+    res.status(502).json({ error: (err as Error).message });
+  }
+});
+
+// Telegram webhook - the production handler (Railway), mirroring api/telegram/webhook.ts.
+// Telegram echoes the secret_token we registered; that header is the auth boundary.
+app.post("/api/telegram/webhook", async (req, res) => {
+  const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  if (!secret || !botToken) { res.status(503).json({ error: "telegram unconfigured" }); return; }
+  if (req.header("x-telegram-bot-api-secret-token") !== secret) { res.status(401).json({ error: "bad secret" }); return; }
+
+  const update = (req.body ?? {}) as { message?: { text?: string; chat?: { id?: number }; from?: { username?: string } } };
+  const chatId = update.message?.chat?.id;
+  const text = String(update.message?.text ?? "").trim();
+  const username = update.message?.from?.username;
+  if (typeof chatId !== "number" || !text) { res.status(200).json({ ok: true }); return; }
+
+  try {
+    const store = TelegramStore.fromEnv();
+    const startMatch = text.match(/^\/start(?:@\w+)?\s+(\S+)$/);
+    if (startMatch) {
+      const code = startMatch[1];
+      const entry = await store.getLinkCode(code);
+      if (!entry || entry.expiresAt <= Date.now()) {
+        if (entry) await store.consumeLinkCode(code);
+        await sendMessage(botToken, chatId, "This link expired or is invalid. Open Panik and click Connect Telegram again.");
+      } else {
+        await store.upsertLink({ wallet: entry.wallet, chatId, username });
+        await store.consumeLinkCode(code);
+        await sendMessage(botToken, chatId, `Connected. Panik will alert this chat when wallet ${truncateWallet(entry.wallet)} nears your risk limit. Send /stop to disable.`);
+      }
+    } else if (/^\/stop(?:@\w+)?$/.test(text)) {
+      await store.disableLink(chatId);
+      await sendMessage(botToken, chatId, "Alerts disabled. Send /start again from Panik to re-enable.");
+    } else if (/^\/start(?:@\w+)?$/.test(text)) {
+      await sendMessage(botToken, chatId, "Open Panik and click Connect Telegram to link this chat to your wallet.");
+    } else {
+      await sendMessage(botToken, chatId, "Unknown command. Connect from the Panik dashboard, or send /stop to disable alerts.");
+    }
+  } catch (err) {
+    console.error(`telegram webhook error: ${(err as Error).message}`);
+  }
+  res.status(200).json({ ok: true });
+});
+
 app.get("/api/chain", async (_req, res) => {
   try {
     res.json(await getChain());
@@ -367,6 +456,26 @@ app.get("/api/chain", async (_req, res) => {
     res.status(500).json({ error: (err as Error).message });
   }
 });
+
+// Optional: serve the built SPA from this same service, so ONE Railway service
+// can host frontend + backend at the same origin (no CORS, no rewrite). Off by
+// default - the frontend usually lives on Vercel's CDN with /api/* rewritten
+// here. Enable with SERVE_STATIC=true after `npm run build`.
+if (process.env.SERVE_STATIC === "true") {
+  const dist = path.resolve("dist");
+  // Mirror the vercel.json clean-URL rewrites for the multi-entry build.
+  const pageFor = (p: string): string => {
+    if (p === "/app") return "app.html";
+    if (p === "/founding" || p === "/early-access") return "founding.html";
+    return "index.html";
+  };
+  app.use(express.static(dist, { extensions: ["html"] }));
+  app.use((req, res, next) => {
+    if (req.method !== "GET" || req.path.startsWith("/api/")) return next();
+    res.sendFile(path.join(dist, pageFor(req.path)));
+  });
+  console.log(`serving static SPA from ${dist}`);
+}
 
 // Dev safety net: never let a stray upstream rejection take the whole API down.
 process.on("unhandledRejection", (reason) =>

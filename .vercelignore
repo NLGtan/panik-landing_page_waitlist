@@ -1,6 +1,10 @@
 # Keep the deployment lean and the scoring core / research OFF Vercel.
 # (Vercel serves only the built `dist/` anyway — these are never web-served —
 #  but excluding them keeps the upload small and the core source off the host.)
+# api/ excluded ON PURPOSE: the backend runs on Railway now (all /api routes) and
+# vercel.json rewrites /api/* there. If these functions deployed, Vercel's
+# filesystem match would shadow the rewrite. They stay in the repo as a fallback.
+api/
 scripts/
 docs/
 supabase/

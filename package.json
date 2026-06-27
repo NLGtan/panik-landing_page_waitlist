@@ -17,7 +17,12 @@
     "demo:scores": "node --env-file=.env --import tsx scripts/score-demo.ts",
     "demo:watch": "node --env-file=.env --import tsx scripts/watch-demo.ts",
     "db:verify": "node --env-file=.env scripts/verify-schema.mjs",
-    "dev:api": "node --watch --env-file=.env --import tsx scripts/api-server.ts"
+    "db:size": "node --env-file=.env scripts/db-size.mjs",
+    "dev:api": "node --watch --env-file=.env --import tsx scripts/api-server.ts",
+    "start:api": "node --import tsx scripts/api-server.ts",
+    "worker": "node --import tsx scripts/watch-worker.ts",
+    "worker:dev": "node --env-file=.env --import tsx scripts/watch-worker.ts",
+    "telegram:setup": "node --env-file=.env --import tsx scripts/set-telegram-webhook.ts"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.14",

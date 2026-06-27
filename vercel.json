@@ -5,10 +5,8 @@
   "outputDirectory": "dist",
   "cleanUrls": true,
   "trailingSlash": false,
-  "functions": {
-    "api/**/*.ts": { "maxDuration": 30 }
-  },
   "rewrites": [
+    { "source": "/api/:path*", "destination": "https://panikrisk-scoring-production.up.railway.app/api/:path*" },
     { "source": "/app", "destination": "/app.html" },
     { "source": "/founding", "destination": "/founding.html" },
     { "source": "/early-access", "destination": "/founding.html" }

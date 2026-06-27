@@ -430,6 +430,48 @@ Slice 3 (wk 7–10)  Advisor recommendation engine (4-section format; new data: 
 Slice 4 (wk 10–12) Polish, 10 external users, demo
 ```
 
+### Backend hosting: Railway, not Vercel serverless
+
+The Node backend runs as long-lived services on **Railway**, not Vercel functions.
+Vercel serverless is a poor fit for the scoring backend: it needs viem + Multicall3
+RPC (which fights esbuild bundling), is capped at 30s, and cannot hold the warm
+score/compass caches. Two Railway services run from this repo (Postgres stays on
+Supabase):
+
+- **panikrisk-scoring (web)** - `scripts/api-server.ts` via `npm run start:api`.
+  The Express server exposes ALL `/api` routes (scores, positions, compass,
+  prospective, chain, profiler start/result, telegram link + webhook). It reads
+  `PORT` from Railway, supports CORS (`CORS_ORIGINS`) for a cross-origin SPA, and
+  can optionally serve the built SPA itself (`SERVE_STATIC=true`).
+- **panik-watch-worker (worker)** - `scripts/watch-worker.ts` via `npm run worker`,
+  the 24/7 scoring + Telegram dispatch loop.
+
+The frontend stays a static build (Vercel CDN) with `/api/*` rewritten to the
+panikrisk-scoring public domain, or is served directly by the web service with
+`SERVE_STATIC=true`. The `api/*.ts` Vercel functions remain in the repo as a
+fallback but are superseded by the Express routes. Build/run config:
+`Dockerfile`, `railway.toml`, `Procfile`.
+
+### Watch delivery split (Slice 2/3): standalone worker + serverless webhook
+
+The 60s Watch loop runs as a **standalone Node worker** (`scripts/watch-worker.ts`,
+`npm run worker`), NOT on Vercel: scoring needs viem + Multicall3 RPC, which we
+deliberately keep out of the serverless bundle (that bundle is fetch-only by
+design - see the profiler functions). The worker scores via the same
+`ActiveAdapter` the dev api-server uses, persists `score_snapshots` (on change +
+15-min heartbeat) and `watch_transitions`, then a second in-process loop drains
+the unnotified queue and sends Telegram.
+
+Delivery is **persist-then-dispatch**: `onTransition` only writes a
+`watch_transitions` row (`notified_at` NULL); a separate poller sends and stamps
+`notified_at`/`notify_channel`, so a crash between scoring and sending never
+drops an alert (the row is re-picked on restart). Restart dedupe is handled by
+seeding `WatchService.lastStatus` from the persisted transition tail. Anti-spam
+(confirmTicks debounce, per-position cooldown, materiality filter) lives at the
+delivery layer in `ALERT_POLICY`, never touching the score. The Telegram link
+flow (deep-link mint + `/start` webhook) runs as fetch-only Vercel functions
+under `api/telegram/`. Full design: `docs/technical-docs/TELEGRAM_ALERTS.md`.
+
 Post-camp (contract work resumes, in order):
 
 ```

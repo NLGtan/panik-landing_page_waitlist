@@ -1,0 +1,37 @@
+# Railway config for the PANIK backend. Postgres stays on Supabase; only the
+# Node backend moves here (Vercel serverless is a poor fit for viem/RPC scoring).
+#
+# Run TWO services from this one repo (each is cheap and restarts independently):
+#
+#   1. "panikrisk-scoring" (web)  -> startCommand: npm run start:api
+#        The Express API: all /api routes (scores, positions, compass,
+#        prospective, chain, profiler, telegram link + webhook). Needs a PUBLIC
+#        domain (Railway: Settings -> Networking -> Generate Domain). Railway
+#        injects PORT automatically.
+#        Optional: set SERVE_STATIC=true to also serve the built SPA from dist/
+#        (single-service hosting, no Vercel needed).
+#
+#   2. "panik-watch-worker" (worker) -> startCommand: npm run worker
+#        The 24/7 scoring + Telegram dispatch loop. No public domain needed.
+#        Override this service's start command to `npm run worker` in its
+#        Railway settings (this file's default below targets the web service).
+#
+# Service variables (set per service in the Railway dashboard, never committed):
+#   web:    COINGECKO_API_KEY, ALCHEMY_API_KEY_BASE_MAINNET, SUPABASE_DB_URL,
+#           SUPABASE_URL, SUPABASE_SECRET_KEY, DUNE_API_KEY, OPENROUTER_API_KEY,
+#           TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET, VITE_TELEGRAM_BOT_USERNAME,
+#           CORS_ORIGINS (your frontend origin), [SERVE_STATIC=true]
+#   worker: TELEGRAM_BOT_TOKEN, SUPABASE_DB_URL, ALCHEMY_API_KEY_BASE_MAINNET,
+#           COINGECKO_API_KEY
+# SUPABASE_DB_URL's session-pooler string is auto-upgraded to 6543 by
+# transactionPoolerUrl(); no change needed.
+
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "npm run start:api"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 10
+numReplicas = 1

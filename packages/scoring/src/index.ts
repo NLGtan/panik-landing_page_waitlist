@@ -17,6 +17,13 @@ export { CompoundActiveReader } from "./adapters/activeCompound";
 export { MorphoActiveReader } from "./adapters/activeMorpho";
 export * from "./adapters/active";
 export * from "./watch/loop";
+export { formatAlert, truncateWallet, type AlertExtras } from "./watch/alertMessage";
+export {
+  decideSend,
+  type SendReason,
+  type PriorAlert,
+  type SendDecisionInput,
+} from "./watch/alertPolicy";
 export * from "./providers/types";
 export { CoinGeckoProvider } from "./providers/coingecko";
 export { DefiLlamaProvider } from "./providers/defillama";

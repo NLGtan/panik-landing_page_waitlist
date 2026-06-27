@@ -42,6 +42,7 @@ import {
 } from "./lib/live";
 import { ProtocolLogo } from "./components/ProtocolLogo";
 import { Onboarding } from "./components/Onboarding";
+import { registerWatchedWallet, useTelegramLink, isEvmAddress } from "./lib/telegram";
 import {
   SEGMENT_LABELS,
   RISK_TIER_LABELS,
@@ -51,7 +52,7 @@ import {
 } from "./lib/profiling";
 import { motion, AnimatePresence } from "motion/react";
 
-type SidebarTab = "compass" | "watch" | "advisor" | "portfolio";
+type SidebarTab = "compass" | "watch" | "advisor" | "portfolio" | "settings";
 type RiskProfile = "conservative" | "moderate" | "aggressive";
 
 // Colour for the user-segment badge in the dashboard header.
@@ -281,6 +282,9 @@ export function AppDemo() {
     setRiskTier(result.riskTier);
     setOnboardedWallet(wallet);
     setShowOnboarding(false);
+    // Register this wallet for monitoring (fire-and-forget; never blocks entry).
+    // No-op for non-EVM wallets. Enables Watch-worker scoring + Telegram alerts.
+    void registerWatchedWallet(wallet.trim(), result.riskProfile3);
   };
 
   // Telemetry simulation
@@ -293,9 +297,7 @@ export function AppDemo() {
     "08:04:15 UTC - Status OK. Integrity rate: 99.8%"
   ]);
 
-  // Alert simulation states for Settings
-  const [telegramWebhook, setTelegramWebhook] = useState("");
-  const [alertSuccessMessage, setAlertSuccessMessage] = useState<string | null>(null);
+  // Settings tab preferences (auto-repayment trigger).
   const [automaticRepayTarget, setAutomaticRepayTarget] = useState<number>(30);
   const [isRepayActive, setIsRepayActive] = useState<boolean>(true);
 
@@ -310,6 +312,11 @@ export function AppDemo() {
   // boundMode hides the registry selector entirely. (SIWE later proves ownership.)
   const boundMode = Boolean(onboardedWallet);
   const ownLive = useWalletPositions(onboardedWallet, selectedRiskProfile);
+
+  // Telegram alert linking (Connect Telegram lives in the Settings tab).
+  const telegramLink = useTelegramLink();
+  const telegramEligible = boundMode && !!onboardedWallet && isEvmAddress(onboardedWallet);
+  const telegramBotUsername = (import.meta.env.VITE_TELEGRAM_BOT_USERNAME as string | undefined) || "PanikBot";
 
   // A user portfolio is ONE wallet. In boundMode that's the onboarded wallet;
   // otherwise (ops view) the registry holds the validation cohort with a selector.
@@ -569,13 +576,6 @@ export function AppDemo() {
     return "HIGH";
   };
 
-  // Send a test Alert helper for settings tab
-  const handleSendTestAlert = () => {
-    addLog("Sending test firewall event trigger packet...");
-    setAlertSuccessMessage("Telemetry alert dispatched! Connection verified successfully.");
-    setTimeout(() => setAlertSuccessMessage(null), 4000);
-  };
-
   const TOUR_STEPS = [
     { step: 1, label: "Start here", body: "This is your Panik dashboard. Use the sidebar to navigate between tools." },
     { step: 2, label: "Connect your wallet", body: "Link your wallet so Panik can read your live on-chain positions." },
@@ -656,6 +656,18 @@ export function AppDemo() {
             >
               <Sparkles className={`w-4 h-4 ${activeTab === "advisor" ? "text-panik-orange" : "text-panik-text-secondary"}`} />
               <span>Advisor</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("settings")}
+              className={`w-full flex items-center gap-3 px-4.5 py-3 rounded-lg text-xs font-mono uppercase tracking-wider text-left transition-all cursor-pointer ${
+                activeTab === "settings"
+                  ? "bg-white/[0.06] border border-white/[0.08] text-white font-bold"
+                  : "text-panik-text-secondary hover:text-white hover:bg-white/[0.02] border border-transparent"
+              }`}
+            >
+              <SettingsIcon className={`w-4 h-4 ${activeTab === "settings" ? "text-panik-orange" : "text-panik-text-secondary"}`} />
+              <span>Settings</span>
             </button>
           </nav>
         </div>
@@ -1484,6 +1496,121 @@ export function AppDemo() {
                   </div>
                 </div>
 
+              </motion.div>
+            )}
+
+            {/* VIEW E: SETTINGS TAB (Sentry preferences + Telegram alert dispatcher) */}
+            {activeTab === "settings" && (
+              <motion.div
+                key="settings"
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -5 }}
+                transition={{ duration: 0.18 }}
+                className="max-w-5xl space-y-6"
+              >
+                <div className="border-b border-white/[0.05] pb-3">
+                  <span className="block text-[9px] font-mono tracking-widest text-panik-orange uppercase">Sentry System Preferences</span>
+                  <h2 className="text-xl font-display font-extrabold text-white tracking-wide">Settings &amp; Endpoints</h2>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                  {/* Main settings column */}
+                  <div className="lg:col-span-8 space-y-6">
+
+                    {/* Telegram alerts dispatcher (the real Connect flow) */}
+                    <div className="bg-[#111318]/50 border border-white/[0.06] p-6 rounded-2xl space-y-3">
+                      <div className="flex items-center gap-2 border-b border-white/[0.05] pb-2.5">
+                        <Bell className="w-4 h-4 text-panik-orange" />
+                        <h3 className="text-[11px] font-mono uppercase tracking-widest text-white font-bold">
+                          Web3 Telegram Alerts Dispatcher
+                        </h3>
+                      </div>
+                      <p className="text-[12px] text-[#A0AEC0] leading-relaxed font-sans">
+                        Get a Telegram message when this wallet nears your {selectedRiskProfile} risk limit. PANIK only
+                        pings you on a real transition toward liquidation - debounced, deduped, and rate-limited, never on noise.
+                      </p>
+                      <div className="flex flex-col sm:flex-row gap-3 pt-1">
+                        <div className="flex-1 h-10 px-3 flex items-center bg-[#0A0A0B]/80 border border-white/10 rounded-lg font-mono text-[11px] text-white/55 truncate">
+                          {telegramEligible ? `Linking ${onboardedWallet?.slice(0, 6)}...${onboardedWallet?.slice(-4)}` : "No EVM wallet onboarded"}
+                        </div>
+                        <button
+                          type="button"
+                          disabled={!telegramEligible || telegramLink.status === "requesting"}
+                          onClick={() => onboardedWallet && telegramLink.connect(onboardedWallet)}
+                          className="h-10 px-4 rounded-lg text-[11px] font-mono font-extrabold uppercase tracking-wide transition-all disabled:opacity-40 disabled:cursor-not-allowed bg-gradient-to-tr from-panik-orange to-red-500 text-white hover:opacity-90 cursor-pointer"
+                        >
+                          {telegramLink.status === "requesting" ? "Opening..." :
+                           telegramLink.status === "opened" ? "Open Telegram" : "Connect Telegram"}
+                        </button>
+                      </div>
+                      {!telegramEligible && (
+                        <p className="text-[10px] font-mono text-white/30">Onboard with an EVM wallet (0x...) to enable alerts.</p>
+                      )}
+                      {telegramLink.status === "opened" && (
+                        <p className="text-[10px] font-mono text-emerald-400">Press Start in the Telegram chat to finish linking.</p>
+                      )}
+                      {telegramLink.status === "error" && telegramLink.error && (
+                        <p className="text-[10px] font-mono text-red-400">{telegramLink.error}</p>
+                      )}
+                    </div>
+
+                    {/* Emergency auto repayment trigger (interactive preference) */}
+                    <div className="bg-[#111318]/50 border border-white/[0.06] p-6 rounded-2xl space-y-3">
+                      <div className="flex justify-between items-center border-b border-white/[0.05] pb-2.5">
+                        <div className="flex items-center gap-2">
+                          <Sliders className="w-4 h-4 text-panik-orange" />
+                          <h3 className="text-[11px] font-mono uppercase tracking-widest text-white font-bold">
+                            Emergency Auto Repayment Trigger
+                          </h3>
+                        </div>
+                        <button
+                          type="button"
+                          aria-pressed={isRepayActive}
+                          onClick={() => setIsRepayActive((v) => !v)}
+                          className={`w-9 h-5 rounded-full p-[2px] transition-colors cursor-pointer ${isRepayActive ? "bg-panik-orange" : "bg-white/15"}`}
+                        >
+                          <div className={`bg-white w-4 h-4 rounded-full transition-transform ${isRepayActive ? "translate-x-4" : "translate-x-0"}`} />
+                        </button>
+                      </div>
+                      <p className="text-[12px] text-[#A0AEC0] leading-relaxed font-sans">
+                        Set the share of borrowed liability PANIK should target for emergency repayment when a position
+                        enters extreme risk. Execution ships with the Deleverager; this stores your preference.
+                      </p>
+                      <div className={`bg-[#0A0A0B]/60 p-3 rounded-lg border border-white/[0.03] space-y-1.5 transition-opacity ${isRepayActive ? "" : "opacity-40 pointer-events-none"}`}>
+                        <div className="flex justify-between text-[11px] font-mono text-panik-text-secondary">
+                          <span>Auto target repayment chunk:</span>
+                          <span className="text-white font-bold">{automaticRepayTarget}% of liability</span>
+                        </div>
+                        <input
+                          type="range"
+                          min={10}
+                          max={80}
+                          step={5}
+                          value={automaticRepayTarget}
+                          onChange={(e) => setAutomaticRepayTarget(Number(e.target.value))}
+                          className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-panik-orange"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Integration sidebar */}
+                  <div className="lg:col-span-4 space-y-4">
+                    <div className="bg-white/[0.01] border border-white/[0.05] p-5 rounded-2xl space-y-2">
+                      <h4 className="text-[10px] font-mono font-bold text-white uppercase tracking-widest">How to connect alerts</h4>
+                      <ol className="text-[11px] text-[#A0AEC0] space-y-1.5 list-decimal pl-4 font-sans leading-relaxed">
+                        <li>Click <span className="text-panik-orange font-semibold">Connect Telegram</span> - it opens <span className="text-white font-semibold">@{telegramBotUsername}</span>.</li>
+                        <li>Press <span className="text-panik-orange">Start</span> in the chat to confirm.</li>
+                        <li>Alerts fire when your wallet nears its risk limit.</li>
+                        <li>Send <span className="text-panik-orange">/stop</span> any time to mute them.</li>
+                      </ol>
+                    </div>
+                    <div className="p-3 bg-panik-orange/[0.03] border border-panik-orange/15 rounded-2xl font-sans text-[11px] text-[#A0AEC0] leading-relaxed">
+                      We store only your Telegram chat id and wallet. No private keys, ever. Send /stop to disable instantly.
+                    </div>
+                  </div>
+                </div>
               </motion.div>
             )}
 
