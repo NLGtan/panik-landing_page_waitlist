@@ -63,3 +63,33 @@ export async function sendMessage(
     description: body.description,
   };
 }
+
+/**
+ * Register the bot's webhook with Telegram (idempotent). Called on API boot so
+ * /start updates are delivered without a manual `telegram:setup`. `secret` is
+ * echoed back by Telegram in the X-Telegram-Bot-Api-Secret-Token header, which
+ * the webhook handler checks.
+ */
+export async function setWebhook(
+  token: string,
+  url: string,
+  secret: string,
+): Promise<TelegramSendResult> {
+  let res: Response;
+  try {
+    res = await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url, secret_token: secret, allowed_updates: ["message"] }),
+    });
+  } catch (err) {
+    return { ok: false, status: 0, description: (err as Error).message };
+  }
+  let body: { ok?: boolean; error_code?: number; description?: string } = {};
+  try {
+    body = (await res.json()) as typeof body;
+  } catch {
+    // Non-JSON body (rare); fall back to HTTP status.
+  }
+  return { ok: res.ok && body.ok === true, status: res.status, errorCode: body.error_code, description: body.description };
+}

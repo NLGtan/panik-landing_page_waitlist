@@ -39,7 +39,7 @@ import {
 } from "../packages/scoring/src/index";
 import { getProfileDeps, isEvmAddress, transactionPoolerUrl } from "../server/profileDeps";
 import { TelegramStore } from "../server/telegramStore";
-import { sendMessage } from "../server/telegram";
+import { sendMessage, setWebhook } from "../server/telegram";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 
@@ -493,9 +493,29 @@ process.on("unhandledRejection", (reason) =>
   console.error(`unhandledRejection (kept alive): ${reason instanceof Error ? reason.message : String(reason)}`),
 );
 
-// Bind IPv4 explicitly — pairs with the Vite proxy's 127.0.0.1 target.
+// Auto-register the Telegram webhook on boot (idempotent) so /start updates are
+// delivered without a manual `telegram:setup`. Uses TELEGRAM_PUBLIC_BASE_URL, or
+// Railway's injected RAILWAY_PUBLIC_DOMAIN. No-op if telegram is unconfigured.
+function autoRegisterTelegramWebhook(): void {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  const base =
+    process.env.TELEGRAM_PUBLIC_BASE_URL ??
+    (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : undefined);
+  if (!token || !secret || !base) {
+    console.log("telegram webhook auto-register skipped (token/secret/public base missing)");
+    return;
+  }
+  const hookUrl = `${base.replace(/\/+$/, "")}/api/telegram/webhook`;
+  void setWebhook(token, hookUrl, secret)
+    .then((r) => console.log(`telegram setWebhook -> ${hookUrl}: ok=${r.ok}${r.description ? ` (${r.description})` : ""}`))
+    .catch((e) => console.error(`telegram setWebhook failed: ${(e as Error).message.slice(0, 120)}`));
+}
+
+// Bind IPv4 explicitly - pairs with the Vite proxy's 127.0.0.1 target.
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`PANIK scoring API on http://127.0.0.1:${PORT}  (scores|compass|prospective|chain)`);
+  autoRegisterTelegramWebhook();
   void getScores()
     .then((c) => console.log(`warmed: ${c.positions.length} live positions`))
     .catch((e) => console.error(`scores warmup skipped: ${(e as Error).message.slice(0, 100)}`));
