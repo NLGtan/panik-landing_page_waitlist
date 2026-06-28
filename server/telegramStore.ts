@@ -100,6 +100,20 @@ export class TelegramStore {
     if (!res.ok) throw new Error(`upsertLink: HTTP ${res.status}`);
   }
 
+  /** Current link for a wallet (drives the connect status check), or null. */
+  async getLink(
+    wallet: string,
+  ): Promise<{ chatId: number; username: string | null; enabled: boolean } | null> {
+    const url =
+      `${this.base}/rest/v1/telegram_links` +
+      `?wallet=eq.${wallet.toLowerCase()}&select=chat_id,username,enabled&limit=1`;
+    const res = await fetch(url, { headers: this.headers() });
+    if (!res.ok) throw new Error(`getLink: HTTP ${res.status}`);
+    const rows = (await res.json()) as { chat_id: number; username: string | null; enabled: boolean }[];
+    const row = rows[0];
+    return row ? { chatId: row.chat_id, username: row.username, enabled: row.enabled } : null;
+  }
+
   /** Disable alerts for a chat (the /stop command). */
   async disableLink(chatId: number): Promise<void> {
     await fetch(`${this.base}/rest/v1/telegram_links?chat_id=eq.${chatId}`, {

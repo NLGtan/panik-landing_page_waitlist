@@ -418,6 +418,21 @@ app.post("/api/telegram/link", async (req, res) => {
   }
 });
 
+// Telegram link status - the browser polls this after Connect to auto-confirm
+// (and on load to show an existing link). Reads via the service key (table is
+// deny-all to the browser); returns only linked + username.
+app.get("/api/telegram/status", async (req, res) => {
+  const wallet = String(req.query.wallet ?? "").trim().toLowerCase();
+  if (!isEvmAddress(wallet)) { res.status(400).json({ error: "invalid EVM wallet address" }); return; }
+  if (!telegramConfigured) { res.status(503).json({ error: "telegram unconfigured" }); return; }
+  try {
+    const link = await TelegramStore.fromEnv().getLink(wallet);
+    res.json({ linked: Boolean(link?.enabled), username: link?.username ?? null });
+  } catch (err) {
+    res.status(502).json({ error: (err as Error).message });
+  }
+});
+
 // Telegram webhook - the production handler (Railway), mirroring api/telegram/webhook.ts.
 // Telegram echoes the secret_token we registered; that header is the auth boundary.
 app.post("/api/telegram/webhook", async (req, res) => {

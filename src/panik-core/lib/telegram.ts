@@ -11,7 +11,7 @@
  * See supabase/migrations/20260627000001_telegram_alerts.sql.
  */
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
@@ -43,7 +43,8 @@ export async function registerWatchedWallet(wallet: string, profile: RiskProfile
   }
 }
 
-type LinkStatus = "idle" | "requesting" | "opened" | "error";
+// "opened" = deep link launched, waiting for Start; "connected" = link confirmed.
+type LinkStatus = "idle" | "requesting" | "opened" | "connected" | "error";
 
 interface LinkResponse {
   code: string;
@@ -51,40 +52,95 @@ interface LinkResponse {
   deepLink: string;
 }
 
-/** Hook driving the "Connect Telegram" button. */
+interface StatusResponse {
+  linked: boolean;
+  username: string | null;
+}
+
+async function fetchLinkStatus(wallet: string): Promise<StatusResponse | null> {
+  try {
+    const res = await fetch(`/api/telegram/status?wallet=${encodeURIComponent(wallet.trim().toLowerCase())}`);
+    if (!res.ok) return null;
+    return (await res.json()) as StatusResponse;
+  } catch {
+    return null;
+  }
+}
+
+/** Hook driving the "Connect Telegram" button (with auto-confirm after Start). */
 export function useTelegramLink() {
   const [status, setStatus] = useState<LinkStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [code, setCode] = useState<string | null>(null);
+  const [username, setUsername] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const connect = useCallback(async (wallet: string) => {
-    if (!isEvmAddress(wallet)) {
-      setStatus("error");
-      setError("Telegram alerts need an EVM wallet (0x...).");
-      return;
-    }
-    setStatus("requesting");
-    setError(null);
-    setCode(null);
-    try {
-      const res = await fetch("/api/telegram/link", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ wallet: wallet.trim().toLowerCase() }),
-      });
-      if (!res.ok) {
-        const txt = await res.text().catch(() => "");
-        throw new Error(`http_${res.status}: ${txt.slice(0, 120)}`);
-      }
-      const data = (await res.json()) as LinkResponse;
-      setCode(data.code);
-      window.open(data.deepLink, "_blank", "noopener,noreferrer");
-      setStatus("opened");
-    } catch (err) {
-      setStatus("error");
-      setError((err as Error).message);
+  const stopPoll = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
     }
   }, []);
 
-  return { status, error, code, connect };
+  // Clear the poll if the component unmounts.
+  useEffect(() => stopPoll, [stopPoll]);
+
+  /** Check for an existing link (call on mount) so the card shows "Connected". */
+  const check = useCallback(async (wallet: string) => {
+    if (!isEvmAddress(wallet)) return;
+    const s = await fetchLinkStatus(wallet);
+    if (s?.linked) {
+      setUsername(s.username);
+      setStatus("connected");
+    }
+  }, []);
+
+  const connect = useCallback(
+    async (wallet: string) => {
+      if (!isEvmAddress(wallet)) {
+        setStatus("error");
+        setError("Telegram alerts need an EVM wallet (0x...).");
+        return;
+      }
+      setStatus("requesting");
+      setError(null);
+      setCode(null);
+      try {
+        const res = await fetch("/api/telegram/link", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ wallet: wallet.trim().toLowerCase() }),
+        });
+        if (!res.ok) {
+          const txt = await res.text().catch(() => "");
+          throw new Error(`http_${res.status}: ${txt.slice(0, 120)}`);
+        }
+        const data = (await res.json()) as LinkResponse;
+        setCode(data.code);
+        window.open(data.deepLink, "_blank", "noopener,noreferrer");
+        setStatus("opened");
+
+        // Auto-confirm: poll until the webhook records the link (~2 min window).
+        stopPoll();
+        let tries = 0;
+        pollRef.current = setInterval(async () => {
+          tries += 1;
+          const s = await fetchLinkStatus(wallet);
+          if (s?.linked) {
+            setUsername(s.username);
+            setStatus("connected");
+            stopPoll();
+          } else if (tries >= 40) {
+            stopPoll(); // give up polling; user stays on "opened" with the manual code
+          }
+        }, 3000);
+      } catch (err) {
+        setStatus("error");
+        setError((err as Error).message);
+      }
+    },
+    [stopPoll],
+  );
+
+  return { status, error, code, username, connect, check };
 }

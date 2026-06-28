@@ -317,6 +317,11 @@ export function AppDemo() {
   const telegramLink = useTelegramLink();
   const telegramEligible = boundMode && !!onboardedWallet && isEvmAddress(onboardedWallet);
   const telegramBotUsername = (import.meta.env.VITE_TELEGRAM_BOT_USERNAME as string | undefined) || "PanikBot";
+  // Reflect an existing Telegram link on load (card shows "Connected as @handle").
+  useEffect(() => {
+    if (telegramEligible && onboardedWallet) void telegramLink.check(onboardedWallet);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onboardedWallet, telegramEligible]);
 
   // A user portfolio is ONE wallet. In boundMode that's the onboarded wallet;
   // otherwise (ops view) the registry holds the validation cohort with a selector.
@@ -1531,8 +1536,17 @@ export function AppDemo() {
                         pings you on a real transition toward liquidation - debounced, deduped, and rate-limited, never on noise.
                       </p>
                       <div className="flex flex-col sm:flex-row gap-3 pt-1">
-                        <div className="flex-1 h-10 px-3 flex items-center bg-[#0A0A0B]/80 border border-white/10 rounded-lg font-mono text-[11px] text-white/55 truncate">
-                          {telegramEligible ? `Linking ${onboardedWallet?.slice(0, 6)}...${onboardedWallet?.slice(-4)}` : "No EVM wallet onboarded"}
+                        <div className="flex-1 h-10 px-3 flex items-center bg-[#0A0A0B]/80 border border-white/10 rounded-lg font-mono text-[11px] truncate">
+                          {telegramLink.status === "connected" ? (
+                            <span className="text-emerald-400 flex items-center gap-1.5">
+                              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                              Connected{telegramLink.username ? ` as @${telegramLink.username}` : ""}
+                            </span>
+                          ) : (
+                            <span className="text-white/55">
+                              {telegramEligible ? `Linking ${onboardedWallet?.slice(0, 6)}...${onboardedWallet?.slice(-4)}` : "No EVM wallet onboarded"}
+                            </span>
+                          )}
                         </div>
                         <button
                           type="button"
@@ -1541,15 +1555,24 @@ export function AppDemo() {
                           className="h-10 px-4 rounded-lg text-[11px] font-mono font-extrabold uppercase tracking-wide transition-all disabled:opacity-40 disabled:cursor-not-allowed bg-gradient-to-tr from-panik-orange to-red-500 text-white hover:opacity-90 cursor-pointer"
                         >
                           {telegramLink.status === "requesting" ? "Opening..." :
-                           telegramLink.status === "opened" ? "Open Telegram" : "Connect Telegram"}
+                           telegramLink.status === "connected" ? "Reconnect" :
+                           telegramLink.status === "opened" ? "Waiting..." : "Connect Telegram"}
                         </button>
                       </div>
                       {!telegramEligible && (
                         <p className="text-[10px] font-mono text-white/30">Onboard with an EVM wallet (0x...) to enable alerts.</p>
                       )}
+                      {telegramLink.status === "connected" && (
+                        <p className="text-[11px] font-mono text-emerald-400">
+                          Alerts are on. Send /stop in the bot anytime to pause them.
+                        </p>
+                      )}
                       {telegramLink.status === "opened" && (
                         <div className="space-y-1.5 pt-1.5 border-t border-white/[0.05]">
-                          <p className="text-[10px] font-mono text-emerald-400">Press Start in the Telegram chat to finish linking.</p>
+                          <p className="text-[10px] font-mono text-emerald-400 flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                            Waiting for you to press Start in @{telegramBotUsername} - this confirms automatically.
+                          </p>
                           <p className="text-[11px] font-sans text-[#A0AEC0] leading-relaxed">
                             If the link didn't open automatically, copy this command, open <strong className="text-white">@{telegramBotUsername}</strong> in Telegram, and send it:
                           </p>
