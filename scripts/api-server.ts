@@ -30,7 +30,7 @@ import {
   scoreProspective,
   startProfileScan,
   statusFor,
-  truncateWallet,
+  formatWelcome,
   type ActiveScore,
   type Protocol,
   type PublicClientLike,
@@ -444,7 +444,7 @@ app.post("/api/telegram/webhook", async (req, res) => {
       } else {
         await store.upsertLink({ wallet: entry.wallet, chatId, username });
         await store.consumeLinkCode(code);
-        await sendMessage(botToken, chatId, `Connected. Panik will alert this chat when wallet ${truncateWallet(entry.wallet)} nears your risk limit. Send /stop to disable.`);
+        await sendMessage(botToken, chatId, formatWelcome(entry.wallet));
       }
     } else if (/^\/stop(?:@\w+)?$/.test(text)) {
       await store.disableLink(chatId);

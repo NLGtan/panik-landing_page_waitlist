@@ -17,7 +17,7 @@ export { CompoundActiveReader } from "./adapters/activeCompound";
 export { MorphoActiveReader } from "./adapters/activeMorpho";
 export * from "./adapters/active";
 export * from "./watch/loop";
-export { formatAlert, truncateWallet, type AlertExtras } from "./watch/alertMessage";
+export { formatAlert, formatWelcome, truncateWallet, type AlertExtras } from "./watch/alertMessage";
 export {
   decideSend,
   type SendReason,

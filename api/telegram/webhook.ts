@@ -10,7 +10,7 @@
 
 // Specific module, NOT the @panik/scoring barrel (the barrel pulls viem ->
 // isows -> ws, which crashes the Vercel bundle). truncateWallet has no I/O deps.
-import { truncateWallet } from "../../packages/scoring/src/watch/alertMessage";
+import { formatWelcome } from "../../packages/scoring/src/watch/alertMessage";
 import { TelegramStore } from "../../server/telegramStore";
 import { sendMessage } from "../../server/telegram";
 
@@ -84,11 +84,7 @@ export default async function handler(req: Req, res: Res): Promise<void> {
       } else {
         await store.upsertLink({ wallet: entry.wallet, chatId, username });
         await store.consumeLinkCode(code);
-        await sendMessage(
-          token,
-          chatId,
-          `Connected. Panik will alert this chat when wallet ${truncateWallet(entry.wallet)} nears your risk limit. Send /stop to disable.`,
-        );
+        await sendMessage(token, chatId, formatWelcome(entry.wallet));
       }
     } else if (/^\/stop(?:@\w+)?$/.test(text)) {
       await store.disableLink(chatId);

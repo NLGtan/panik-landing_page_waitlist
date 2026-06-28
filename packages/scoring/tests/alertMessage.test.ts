@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatAlert, truncateWallet } from "../src/watch/alertMessage";
+import { formatAlert, formatWelcome, truncateWallet } from "../src/watch/alertMessage";
 import type { WatchTransition } from "../src/watch/loop";
 
 const base: WatchTransition = {
@@ -45,6 +45,21 @@ describe("formatAlert", () => {
   it("uses the approaching copy for an approaching transition", () => {
     const msg = formatAlert({ ...base, to: "approaching", score: 44, band: "ELEVATED" }, { healthFactor: 1.3, borrowUsd: 800 });
     expect(msg).toContain("approaching your risk limit");
+  });
+});
+
+describe("formatWelcome", () => {
+  const wallet = "0x76f88702325c92c83efad341a932fb326957056f";
+
+  it("greets, shows the truncated wallet, and the /stop command", () => {
+    const msg = formatWelcome(wallet);
+    expect(msg).toContain("Welcome to PANIK alerts");
+    expect(msg).toContain("0x76f8...056f");
+    expect(msg).toContain("/stop");
+  });
+
+  it("contains no em dash or en dash (house style)", () => {
+    expect(LONG_DASH.test(formatWelcome(wallet))).toBe(false);
   });
 });
 

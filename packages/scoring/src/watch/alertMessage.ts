@@ -41,6 +41,26 @@ function usd(n: number | null | undefined): string | null {
 }
 
 /**
+ * Welcome message sent when a user connects their Telegram via the /start <code>
+ * deep-link. Plain text, hyphens only (house style). Shared by both webhook
+ * handlers (Railway api-server + Vercel fallback) so the copy never drifts.
+ */
+export function formatWelcome(wallet: string): string {
+  return [
+    "Welcome to PANIK alerts.",
+    "",
+    `This chat is now linked to wallet ${truncateWallet(wallet)}.`,
+    "",
+    "I'll message you here the moment this position drifts toward its liquidation limit. Alerts are debounced and deduped, so only real risk reaches you - never spam.",
+    "",
+    "Commands:",
+    "/stop - pause alerts anytime",
+    "",
+    "Stay safe out there.",
+  ].join("\n");
+}
+
+/**
  * Build the alert body for a transition INTO approaching/outside. (Recovery
  * transitions are filtered out by the dispatcher and never reach here.)
  */
